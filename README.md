@@ -8,6 +8,8 @@ This repository contains all data analysis code, which was used to analyze the l
 the relationship between computer mouse usage and emotional states. The repository does not contain the original raw
 data, because the data files are too large for github. The raw data can be found here: https://doi.org/10.5281/zenodo.6559329
 
+The corresponding research manuscript is: Freihaut, P. & Göritz, A. S. (2022). Show me how you use your mouse and I tell you how you feel? Tracking the computer mouse to measure affect. Manuscript in review
+
 The data was analyzed with Python (3.8.12) and R (4.1.1)
 
 
