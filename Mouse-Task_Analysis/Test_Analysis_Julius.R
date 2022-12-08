@@ -96,6 +96,7 @@ aces_daily <- aces_daily %>%
   group_by(UserID) %>% 
     mutate(STRESS.persMean = mean(STRESS, na.rm=TRUE),
            STRESS.persMeanCent = STRESS-STRESS.persMean,
+           NegAff.persMean = mean (negAFF, na.rm=TRUE),
            NegAff.persMeanCent = NegAff - mean(NegAff, na.rm=TRUE)) %>%
   ungroup %>%
   # Grand mean centering of the aggregated variable
@@ -104,7 +105,7 @@ aces_daily <- aces_daily %>%
 # get some info about the centered variables
 aces_daily %>% select(STRESS, STRESS.grandMeanCent, STRESS.persMeanCent, 
                       STRESS.gmPersMeanCent, NegAff, NegAff.grandMeanCent,
-                      NegAff.persMeanCent) %>% summary()
+                      NegAff.persMeanCent, NegAff.persMean) %>% summary()
 
 
 # - Start with some Model Building
@@ -145,6 +146,14 @@ cbind(M1 = var_reduction(m0, m1.orig)[,4],
       M4 = var_reduction(m0, m1.personMean2)[,4]) %>%
   round(2)
 
+
+# ++ State Control Model 1 Try out a model that additionally has the group mean 
+# as a fixed effect to control for the state variance ++ #
+m1.negAffControl <- lmer(NegAff ~ STRESS.persMeanCent + STRESS.gmPersMeanCent + 
+                           NegAff.persMean + (1| UserID), data = aces_daily)
+model_infos(m1.negAffControl)
+
+
 # now calc a model with a random slope
 m2 <- lmer(NegAff ~ STRESS.persMeanCent + STRESS.gmPersMeanCent + 
              (1 + STRESS.persMeanCent| UserID), data = aces_daily)
@@ -173,7 +182,9 @@ screenreg(list(m2, mDV.grandMean, mDV.persMean),
                          Model 2 = grand-mean centered DV, 
                          Model 3 = person-mean centered DV")
 
-# one last model that has both, the dv as well as the iv person mean centered
+
+# ++ State Control Model 2 Use the person mean centered affect as the outcome
+# variable and remove the random intercept ++ #
 persMeanCentMod <- lmer(NegAff.persMeanCent ~ STRESS.persMeanCent +
                           (0 + STRESS.persMeanCent| UserID), data = aces_daily)
 model_infos(persMeanCentMod)
@@ -318,3 +329,15 @@ model_infos(persMeanCentMod)
 
 # plot the model to see if it works
 ggpredict(persMeanCentMod, terms = c("dist.persMeanCent", "ID [sample=9]"), type="re") %>% plot()
+
+# Questions:
+# 1. Model Building: What models to build and compare? (Null Model, Baseline
+#   Model with controls, Fixed Effect Model, Random Effect Model)
+# 2. Controls: How to handle control variables? Does it make sense to include them in the
+#   analysis (especially zoom, height, width - additional are age, hand, sex,
+#   order number)
+# 3. Model performance: What to report about the models to answer the research 
+#   question? (R²,effect coefficients, AIC, explained state/trait variance?)
+# 4. Data preprocessing: Any suggestions on how to handle the raw data, e.g 
+#   transformation, visualization?
+
