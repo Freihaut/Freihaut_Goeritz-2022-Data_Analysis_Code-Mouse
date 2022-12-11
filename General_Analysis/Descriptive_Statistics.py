@@ -16,23 +16,105 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import PowerTransformer
 from sklearn.preprocessing import scale
+import statsmodels.api as sm
 
 #%%
 
 # dataset imports
 
 # sociodemographic data of all participants
-with gzip.open("Datasets_Raw/sociodem_dataset.json.gz", "rb") as f:
-    sociodem_data = json.loads(f.read())
+# with gzip.open("Datasets_Raw/sociodem_dataset.json.gz", "rb") as f:
+#     sociodem_data = json.loads(f.read())
 
 # convert the dictionary into a pandas dataframe
-sociodem_data = pd.DataFrame(sociodem_data).T
+# sociodem_data = pd.DataFrame(sociodem_data).T
 
 # mousetask data (cleaned)
-mousetask_data = pd.read_csv("Mouse_Task_Features.csv")
+mousetask_data = pd.read_csv("C:/Users/freih/Desktop/Datenauswertung_Paul/Mouse-Task_Analysis/Mouse_Task_Features.csv")
 
 # import the processed free mouse usage features
-free_mouse_data = pd.read_csv("Free_Mouse_Features.csv")
+# free_mouse_data = pd.read_csv("Free_Mouse_Features.csv")
+
+#%%
+
+# create an order variable
+
+def add_order(x):
+    x = x.sort_values(by=["timestamp"])
+    x['order'] = range(len(x))
+    return x
+
+
+mousetask_data = mousetask_data.groupby("ID").apply(func=add_order)
+mousetask_data.reset_index(drop = True, inplace = True)
+
+
+#%%
+
+# plot to show the time effect of selected variables (to visually test if there are noticable habituation effects)
+def plot_habituation(data, target, name):
+
+    # select a subset of the dataset to make the plot a little bit better to view
+    N = 24
+    vals = np.random.choice(data['ID'].unique(), N, replace=False)
+
+    selected_groups = data[data['ID'].isin(vals)]
+
+    # create a (linear) line plot for the randomly chosen persons to see potential changes in the target over time
+    sns.lmplot(
+        data=selected_groups, x="order", y=target,
+        col="ID", height=3,
+        facet_kws=dict(sharex=False, sharey=False),
+    )
+
+    plt.show()
+
+#%%
+
+plot_habituation(mousetask_data, "valence", "test")
+
+
+#%%
+
+plot_habituation(mousetask_data, "task_duration", "")
+
+
+#%%
+
+def regress(data, yvar, xvars):
+    Y = data[yvar]
+    X = data[xvars]
+    X['intercept'] = 1.
+    result = sm.OLS(Y, X).fit()
+    params = result.params.loc["order"]
+    ci = result.conf_int(alpha=0.05, cols=None).loc["order"]
+    ci.index = ['conf_low', 'conf_high']
+    ci["estimate"] = params
+
+    return ci
+
+
+
+#This is what you need
+test = mousetask_data.groupby('ID').apply(regress, 'valence', ['order'])
+test.reset_index(drop=True, inplace=True)
+test = test.sort_values(by=["estimate"])
+
+#%%
+test["ID"] = range(len(test))
+
+plt.fill_betweenx(test["ID"], test["conf_low"], test["conf_high"], color="grey", alpha=0.2)
+sns.scatterplot(x="estimate", y="ID", data=test, s=8, color="blue")
+plt.vlines(0, 0, len(test),  linestyles="dashed", colors="black")
+plt.show()
+# for yx, lim in zip(yss, lims_y):
+#     plot = axhlines(yx, lims=lim, color='black')
+#
+# # plot the effect of order
+#
+# test.sort_values(by=["order"])["order"].plot()
+# plt.show()
+
 
 #%%
 
@@ -430,7 +512,6 @@ def plot_pairplot(data, name):
     # plt.savefig(name + '_pairplot.png')
     # show the plot
     plt.show()
-
 
 # Helper function for the outlier removal process in the mouse task dataset
 # the chosen outlier removal method is based on the interquartile range because it is robust against outliers
