@@ -19,7 +19,7 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import make_scorer, balanced_accuracy_score, classification_report, \
     confusion_matrix, ConfusionMatrixDisplay, f1_score, accuracy_score
-from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.inspection import permutation_importance
@@ -62,7 +62,7 @@ all_predictors = ['recording_duration', 'movement_episodes', 'mo_ep_mean_episode
 covariates = ['timestamp', 'zoom', 'screen_width', 'screen_height']
 
 # list all targets
-all_targets = ["arousal", "valence", "stress"]
+all_targets = ["arousal", "valence"]
 
 
 #%%
@@ -447,24 +447,6 @@ def plot_feature_importance_scores(importance_results, col_names, f_name):
     return
 
 
-# very simple helper function to create a default scikitlearn confusion matrix plot for the classification results
-def plot_confusion_matrix(conf_matrix, f_name):
-
-    # set to the default matplotlib plotting style
-    matplotlib.rc_file_defaults()
-
-    # create the confusion matrix plot using the Confusion Matrix Display class from scikitlearn
-    disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix,
-                                  display_labels=["no stress", "stress"])
-    disp.plot()
-
-    # save the confusion matrix with the specified filename in the working directory
-    # plt.savefig(f_name + "_conf_mat.png")
-
-    plt.show()
-
-    return
-
 # helper function for the machine learning regression analysis
 # to give more control about the results, it would also be possible to return the trained model, save it, and be
 # able to get results in a later step without having to wait for the training process over and over again
@@ -546,8 +528,11 @@ def ml_regression(training_data, test_data, predictors, target):
     # get the mean absolute error and R²-score as the regression evaluation metrics
     r2 = r2_score(y_test, predictions)
     mae = mean_absolute_error(y_test, predictions)
+    mse = mean_squared_error(y_test, predictions)
     print(f"R²-Prediction Score: {r2}")
     print(f"Mean Absolute Prediction Error: {mae}")
+    print(f"Mean Squared Prediction Error: {mse}")
+
 
     # Get the feature importance scores to "interpret" the machine learning model
     # ---------------------------------------------------------------------------
@@ -562,108 +547,12 @@ def ml_regression(training_data, test_data, predictors, target):
 
     print(f"Analysis are done")
     # return the results of the regression analysis
-    results = {"hyperparams": selected_hyperparameters, "scores": {"r2": r2, "mae": mae},
+    results = {"hyperparams": selected_hyperparameters, "scores": {"r2": r2, "mae": mae, "mse": mse},
                "feat_importance": feature_importance_scores}
+
 
     return results
 
-
-# helper function for the machine learning classification analysis
-# this function is similar to the regression function. However, some of the details (e.g. the ML model) are different,
-# which made it more convenient to have separate functions instead of one with many if-else statements depending on
-# a regression or classification
-def ml_classification(training_data, test_data, predictors, target):
-
-    # split the data into the predictors and targets
-    x_train, x_test = training_data.loc[:, predictors], test_data.loc[:, predictors]
-    y_train, y_test = training_data[target], test_data[target]
-
-    print(f"Shape of the train-test datasets: {x_train.shape, x_test.shape, y_train.shape, y_test.shape}")
-
-    # Similar to the regression function, there are three parts:
-
-    # Hyperparameter selection:
-    # -------------------------
-
-    # setup the random forest classifier
-    rf_classifier = RandomForestClassifier()
-
-    # setup a grid of hyperparameters that will be tuned in RandomizedSearchCV
-    rf_hyperparameters = {
-        'n_estimators': [100, 200, 300, 400, 500],
-        "criterion": ["entropy", "gini"],
-        'max_features': ['auto', "log2", None],
-        'max_depth': [60, 70, 80, 90, 100, None],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-    }
-
-    # setup Cross Validation
-    # 5-fold cross validation is used.
-    # The folds are stratified by participant AND by target (stress), to implement, stratification by two columns, use
-    # a "hack", see: https://stackoverflow.com/questions/45516424/sklearn-train-test-split-on-pandas-stratify-by-multiple-columns/45526792
-    # setup the cv-generator
-    cv_generator = StratifiedKFold(n_splits=5)
-    # create a columns in the training data that is a combination of the ID column and the stress column
-    training_data_cop = training_data.copy()
-    training_data_cop["custom_stratifier"] = training_data_cop["ID"].astype(str) + "_" \
-                                             + training_data_cop["stress"].astype(str)
-    # create the stratified cv splits based on the stratifier column
-    cv_splits = [(train, test) for train, test in cv_generator.split(
-        X=np.zeros(len(training_data)),
-        y=training_data_cop["custom_stratifier"])]
-
-    # run the RandomizedSearchCV with the selected specifications
-    print("Running the Randomized Search Cross Validation")
-    ml_model = RandomizedSearchCV(rf_classifier, rf_hyperparameters, cv=cv_splits, scoring=make_scorer(f1_score),
-                                  refit=True, n_jobs=8, random_state=rng)
-
-    # Evaluating the tuned model
-    # --------------------------
-
-    # fit the training dataset to the tuned model
-    ml_model.fit(x_train, y_train)
-
-    # get the selected hyperparameters
-    selected_hyperparameters = ml_model.best_params_
-    print(f"Selected Hyperparameters: {selected_hyperparameters}")
-    # It is also possible to get additional infos from the RandomizedSearchCV procedure
-    # print(testing.cv_results_)
-    # print(testing.best_score_)
-
-    # make predictions on the test set
-    predictions = ml_model.predict(x_test)
-
-    # get classification model scores
-    cm = confusion_matrix(y_test, predictions)
-    cr = classification_report(y_test, predictions)
-    acc = accuracy_score(y_test, predictions)
-    b_acc = balanced_accuracy_score(y_test, predictions)
-    f1 = f1_score(y_test, predictions)
-    # print some metrics
-    print(f"Balanced Accuracy Score: {b_acc}")
-    print(f"F1_Score: {f1}")
-    print(f"Accuracy Score: {acc}")
-
-    # Get the feature importance scores to "interpret" the machine learning model
-    # ---------------------------------------------------------------------------
-
-    print(f"Running the feature importance permutation")
-    # use feature importance permutation
-    # see: https://scikit-learn.org/stable/modules/permutation_importance.html
-    feature_importance_scores = permutation_importance(ml_model, x_test, y_test,
-                                                       scoring=make_scorer(f1_score),
-                                                       n_jobs=8,
-                                                       n_repeats=30,
-                                                       random_state=rng)
-
-    print(f"Analysis are done")
-    # return the results of the regression analysis
-    results = {"hyperparams": selected_hyperparameters,
-               "scores": {"cm": cm, "cr": cr, "acc": acc, "b_acc": b_acc, "f1": f1},
-               "feat_importance": feature_importance_scores}
-
-    return results
 
 #%%
 
@@ -685,13 +574,9 @@ playground_target = random.choice(all_targets)
 playground_preds = [pred for pred in list(playground_dset["train"].columns) if pred in all_predictors] + \
                    covariates + ["ID"]
 
-# run the machine learning model (regression for targets valence & arousal; classification for target stress)
+# run the machine learning model (regression for targets valence & arousal)
 print(f"Run the machine learning analysis with dataset {playground_dset_name} and target: {playground_target}")
-if playground_target == "stress":
-    playground_results = ml_classification(playground_dset["train"], playground_dset["test"], playground_preds,
-                                           playground_target)
-else:
-    playground_results = ml_regression(playground_dset["train"], playground_dset["test"], playground_preds,
+playground_results = ml_regression(playground_dset["train"], playground_dset["test"], playground_preds,
                                        playground_target)
 
 
@@ -703,10 +588,6 @@ else:
 for i in playground_results["scores"]:
     print(f"Score: {i}")
     print(playground_results["scores"][i])
-
-# plot the confusion matrix, if it was a classification
-if "cm" in playground_results["scores"]:
-    plot_confusion_matrix(playground_results['scores']['cm'], "playground")
 
 # show the selected hyperparameters
 print(f"Selected Hyperparameters:\n{playground_results['hyperparams']}")
@@ -750,50 +631,22 @@ for target in all_targets:
 
         print(f"Running the machine learning analysis for the BASELINE MODEL using dataset: {dset} and "
               f"target: {target}")
-        # check if it a regression or classification
-        if target == "stress":
-            baseline_results = ml_classification(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
-                                                 baseline_preds, target)
-        else:
-            baseline_results = ml_regression(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
+        baseline_results = ml_regression(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
                                                  baseline_preds, target)
 
         print(f"Running the machine learning analysis for the FULL MODEL using dataset: {dset} and "
               f"target: {target}")
         # check if it a regression or classification
-        if target == "stress":
-            full_model_results = ml_classification(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
-                                                   full_model_preds, target)
-        else:
-            full_model_results = ml_regression(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
+        full_model_results = ml_regression(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
                                                full_model_preds, target)
-
-        print(f"Running the machine learning analysis for the MOUSE FEAT ONLY MODEL using dataset: {dset} and "
-              f"target: {target}")
-        # check if it a regression or classification
-        if target == "stress":
-            mouse_feat_only = ml_classification(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
-                                                   mouse_only_preds, target)
-        else:
-            mouse_feat_only = ml_regression(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
-                                               mouse_only_preds, target)
 
         # save the results + information about the train/test dataset shapes & the mouse usage predictors
         ml_analysis_results[target + "_" + dset]["baseline_results"] = baseline_results
         ml_analysis_results[target + "_" + dset]["full_model_results"] = full_model_results
-        ml_analysis_results[target + "_" + dset]["mouse_only_model_results"] = mouse_feat_only
         ml_analysis_results[target + "_" + dset]["dset_shapes"] = {"train_shape": dataset_pairs[dset]["train"].shape,
                                                                    "test_shape": dataset_pairs[dset]["test"].shape}
         ml_analysis_results[target + "_" + dset]["predictors"] = {"baseline": covariates + ["ID"],
-                                                                  "mouse_only": mouse_only_preds,
-                                                                  "full_model": full_model_preds}
-
-
-#%%
-
-# open a json
-with open("Free_Mouse_Results/ML_Results/Free_Mouse_ML_results.json") as f:
-    ml_analysis_results = json.loads(json.load(f))
+                                                                  "mouse_only": mouse_only_preds}
 
 #%%
 
@@ -837,28 +690,16 @@ with open('Free_Mouse_Results/ML_Results/Free_Mouse_ML_results.p', 'rb') as hand
 for i in ml_analysis_results:
     print(f"Printing Results for: {i}")
     if input("Print the results? [y/n]") == "y":
-        # print baseline results & show the feature importance plots & confusion matrix, if the target is stress
+        # print baseline results
         print("Baseline Results:")
         print(ml_analysis_results[i]["baseline_results"]["scores"])
         plot_feature_importance_scores(ml_analysis_results[i]["baseline_results"]["feat_importance"],
                                        ml_analysis_results[i]["predictors"]["baseline"], 'baseline_' + i)
-        if 'stress' in i:
-            plot_confusion_matrix(ml_analysis_results[i]["baseline_results"]["scores"]["cm"], 'baseline_' + i)
-        # print full model results and show the feature importance plots confusion matrix, if the target is stress
+        # print full model results 
         print("Full Model Results:")
         print(ml_analysis_results[i]["full_model_results"]["scores"])
         plot_feature_importance_scores(ml_analysis_results[i]["full_model_results"]["feat_importance"],
                                        ml_analysis_results[i]["predictors"]["full_model"], 'full_mod_' + i)
-        if 'stress' in i:
-            plot_confusion_matrix(ml_analysis_results[i]["full_model_results"]["scores"]["cm"], 'full_mod' + i)
-        # print full model results and show the feature importance plots confusion matrix, if the target is stress
-        print("Mouse Only Model Results:")
-        print(ml_analysis_results[i]["mouse_only_model_results"]["scores"])
-        plot_feature_importance_scores(ml_analysis_results[i]["mouse_only_model_results"]["feat_importance"],
-                                       ml_analysis_results[i]["predictors"]["mouse_only"], 'mouse_only_' + i)
-        if 'stress' in i:
-            plot_confusion_matrix(ml_analysis_results[i]["mouse_only_model_results"]["scores"]["cm"], 'mouse_only' + i)
-
         print("\n")
     else:
         print("Stopped manually printing the results")
