@@ -30,12 +30,14 @@ import statsmodels.api as sm
 # sociodem_data = pd.DataFrame(sociodem_data).T
 
 # mousetask data (cleaned)
-mousetask_data = pd.read_csv("C:/Users/freih/Desktop/Datenauswertung_Paul/Mouse-Task_Analysis/Mouse_Task_Features.csv")
+mousetask_data = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Mouse_Task_Features.csv")
 
 # import the processed free mouse usage features
 # free_mouse_data = pd.read_csv("Free_Mouse_Features.csv")
 
 #%%
+
+# Need a proper place in the analysis file (or should be done in a previous step in the data processing pipeline?) #
 
 # create an order variable
 
@@ -46,28 +48,98 @@ def add_order(x):
 
 
 mousetask_data = mousetask_data.groupby("ID").apply(func=add_order)
-mousetask_data.reset_index(drop = True, inplace = True)
+mousetask_data.reset_index(drop=True, inplace=True)
 
 
 #%%
 
-# plot to show the time effect of selected variables (to visually test if there are noticable habituation effects)
+# Needs to be moved when everything is ready #
+
+# simple plot to visualize the relationship between the order (time) and a target variable for a randomly drawn
+# subset of participants
 def plot_habituation(data, target, name):
 
-    # select a subset of the dataset to make the plot a little bit better to view
-    N = 24
-    vals = np.random.choice(data['ID'].unique(), N, replace=False)
+    # select a subset of the dataset to make the plot a little bit better to view (there are more than 150 participants
+    # in the dataset, plotting them at once is too much
 
-    selected_groups = data[data['ID'].isin(vals)]
+    # specify the number of random IDs to draw
+    N = 12
+    # draw the random IDs and select the relevant data
+    random_ids = np.random.choice(data['ID'].unique(), N, replace=False)
+    selected_data = data[data['ID'].isin(random_ids)]
 
-    # create a (linear) line plot for the randomly chosen persons to see potential changes in the target over time
-    sns.lmplot(
-        data=selected_groups, x="order", y=target,
-        col="ID", height=3,
-        facet_kws=dict(sharex=False, sharey=False),
-    )
+    # create a scatter plot with a (linear) trend line between the order and the target var for each selected
+    # participant
+    sns.lmplot(data=selected_data, x="order", y=target, col="ID", height=3, facet_kws=dict(sharex=False, sharey=False))
 
     plt.show()
+    # plt.savefig(name + "_" + target + '.png')
+
+
+# another simple plot to visualize the relationship between the order (time) and a target variable for a randomly drawn
+# subset of participants. This plot draws a lineplot for each (randomly selected) participant in the same plot
+def plot_habituation2(data, target, name):
+
+    # specificy the random number of participants that are drawn and plotted
+    N = 12
+    # draw the random IDs and select the relevant data
+    random_ids = np.random.choice(data['ID'].unique(), N, replace=False)
+    selected_data = data[data['ID'].isin(random_ids)]
+
+    # create a simple lineplot for each participant (as indicated by the HUE) in a different color
+    sns.lineplot(data=selected_data, x="order", y=target, hue="ID", lw=0.8)
+    # remove the legend
+    plt.legend([], [], frameon=False)
+
+    plt.show()
+    # plt.savefig(name + "_" + target + '.png')
+
+
+# run individual regression of order (time) on a target variable for each participant to test the (linear) effect of
+# order (time) on the target variable and plot the individual order effect coefficients and their confidence intervals
+def plot_habituation3(data, target, name):
+
+    # helper function to run a (linear) regression per participant
+    def _per_participant_regression(data, yvar, xvars):
+        # get the DV and IV variables
+        Y = data[yvar]
+        X = data[xvars]
+        # add an intercept to the model
+        X['intercept'] = 1.
+        # run the linear regression
+        result = sm.OLS(Y, X).fit()
+        # get the coefficient parameters and the confidence intervals
+        params = result.params.loc["order"]
+        ci = result.conf_int(alpha=0.05, cols=None).loc["order"]
+        ci.index = ['conf_low', 'conf_high']
+        # add both together and return them
+        ci["estimate"] = params
+        return ci
+
+    # Get the by participant regression coefficients and confidence intervals
+    participant_estimates = data.groupby('ID').apply(_per_participant_regression, target, ['order'])
+    participant_estimates.reset_index(drop=True, inplace=True)
+    # sort the values by their size for better plotting
+    participant_estimates = participant_estimates.sort_values(by=["estimate"])
+    # add an ID variable
+    participant_estimates["ID"] = range(len(participant_estimates))
+
+    # create the plot
+
+    # first, loop all participants and create a line of their confidence interval
+    for index, row in participant_estimates.iterrows():
+        plt.hlines(row["ID"], row["conf_low"], row["conf_high"], colors="blue", alpha=0.2)
+    # next, create a scatterplot of the estimate
+    sns.scatterplot(x="estimate", y="ID", data=participant_estimates, color="blue")
+    # finally, add a vertical line that indicates 0
+    plt.vlines(0, 0, len(participant_estimates), linestyles="dashed", colors="black")
+
+    plt.show()
+    # plt.savefig(name + "_" + target + '.png')
+
+#%%
+
+plot_habituation2(mousetask_data, "task_duration", "test")
 
 #%%
 
@@ -77,43 +149,6 @@ plot_habituation(mousetask_data, "valence", "test")
 #%%
 
 plot_habituation(mousetask_data, "task_duration", "")
-
-
-#%%
-
-def regress(data, yvar, xvars):
-    Y = data[yvar]
-    X = data[xvars]
-    X['intercept'] = 1.
-    result = sm.OLS(Y, X).fit()
-    params = result.params.loc["order"]
-    ci = result.conf_int(alpha=0.05, cols=None).loc["order"]
-    ci.index = ['conf_low', 'conf_high']
-    ci["estimate"] = params
-
-    return ci
-
-
-
-#This is what you need
-test = mousetask_data.groupby('ID').apply(regress, 'valence', ['order'])
-test.reset_index(drop=True, inplace=True)
-test = test.sort_values(by=["estimate"])
-
-#%%
-test["ID"] = range(len(test))
-
-plt.fill_betweenx(test["ID"], test["conf_low"], test["conf_high"], color="grey", alpha=0.2)
-sns.scatterplot(x="estimate", y="ID", data=test, s=8, color="blue")
-plt.vlines(0, 0, len(test),  linestyles="dashed", colors="black")
-plt.show()
-# for yx, lim in zip(yss, lims_y):
-#     plot = axhlines(yx, lims=lim, color='black')
-#
-# # plot the effect of order
-#
-# test.sort_values(by=["order"])["order"].plot()
-# plt.show()
 
 
 #%%
