@@ -21,8 +21,8 @@ library(gridExtra)
 library(ggplot2)
 library(broom.mixed)
 library(ggeffects)
-library(bestNormalize)
 library(caret)
+library(Hmisc)
 
 # to show images in a separate window
 # options(device='windows')
@@ -30,7 +30,7 @@ library(caret)
 # get the current working directory (all plots are saved in the current working directory!)
 getwd()
 # set the working directory to the folder with the data
-setwd("C:/Users/freih/Desktop/Datenauswertung_Paul/Mouse-Task_Analysis")
+setwd("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis")
 
 # load the dataset
 mouseTaskData <- read.csv(file = 'Mouse_Task_Features.csv')
@@ -62,39 +62,59 @@ ivs <- c(
 )
 length(ivs)
 
-# list the covariates that will be included in the mixed models
-covariates <- c('timestamp', 'zoom', 'screen_width', 'screen_height', 'median_sampling_freq')
-
 
 #####################################
 #### Creating different datasets ####
 #####################################
 
 # there are many possible specifications to the datasets, which might produce different results in the later analysis
-# we decided to vary selected specifications to get a "richer picture of the analysis results"
-# the specifications concern (1) the removal of outliers, (2) accounting for potential differences in the mouse usage
-# features between the different mouse tasks and (3) the standardization of the input data
+# In most preprocessing steps, decisions need to be made without a clear "best option"
+# We therefore followed the idea of a multiverse analysis approach (Steegen et al., 2016)
+# and created multiply datasets to run the data analysis with. There are potentially
+# infinite possibilities for data preprocessing and our analysis is already quite large
+# and complex. Our "multiverse" therefore only includes datasets with different outlier
+# removal procedures. In other preprocessing steps, we made a decision for a specific option-
+# Notice that every decision can be debated and should not be taken for the "truth".
+# However, it was necessary to narrow down the set of possibilites in order to
+# handle computations and results. The decisions are taken to the best of our knowledge
+# and with regard to the input from reviewers.
 
-# (1) Regarding outlier removal, we chose three options: only remove trials with a very long task duration (> 5 minutes)
+# More specifically, preprocessing included multiple steps in oder to "prepare"
+# the data for the mixed-model analysis
+
+# (1) We removed outliers according to three criteria: only remove trials with a very long task duration (> 5 minutes)
 # as well as using the interquantile range to remove outliers with 2 different thresholds. Note that the IQR outliers
 # are removed separately for each mouse task
 
-# (2) Regarding account for potential task differences, we used linear equating by task on all mouse usage features
-# (i.e. standardize the features by the task)
+# (2) To account for potential systematic differences in mouse usage between
+# the different mouse tasks, we used linear equating (i.e. standardize the features by the task)
 # see: linear equating of the different tasks, see for example: Singh, R. K. (2021). The new normal: Linear equating of
 # different instruments. DOI: 10.34879/gesisblog.2021.33)
 # the idea is to threat the different tasks as "different measurement insturements" of the same underlying (behavioral)
 # construct and equate the different mouse usage parameters to have the same mean and standard deviation (standardize
 # the parameters by the mouse task)
 
-# (3) Regarding standardization, we chose two options: grand-sample standardization, participant-sample standardization
-# standardization was chosen over centering because it makes it easier to compare the input variables, which are measured
-# on very different scales
+# (3) To reduce redundancies between predictors in the dataset, highly correlated
+# predictors will be removed using a correlation threshold of .80. For each
+# correlated predictor pair, the predictor with the higher correlation with the
+# other predictors is removed
 
-# The combination of the outlier removal procedures and the standarization result in 6 different datasets
-# Note, that there are many more options that could potentially be tested (e.g. transforming the input and/or output variables),
-# but adding an option at least doubles the ammount of datasets that need to be tested (at least 12 datasets), which
-# will increase computation time and interpretability of the results (many analysis are performed with each dataset)
+# (4) Predictor and target values barely follow a normal-distribution shape (see the descriptive stats)
+# To acommodate the suggestion of one reviewer that "linear Mixed Effect Model analysis
+# is susceptible to the distribution of the independent and dependent variables, we transformed
+# the input and output variable using rank-based inverse normal transformation
+
+# (5) The predictor variable in the longitudinal measurement includes both,
+# within-variance (state-variance) and between-variance (trait-variance). To better
+# understand the relationship between the target and predictor on the trait and 
+# state level, it is suggested to split the predictor into two predictors, which
+# will separately account for the state (within) and trait (between)
+# (e.g. see Hoffman, L. (2015). Longitudinal analysis: Modeling within-person fluctuation and change)
+# Therefore, each predictor in each dataset is split in such a way
+
+# Differenting between 3 outlier removal procedures results in three different
+# datasets that will be analysed. Note, that there are many more options that could potentially be tested 
+# (e.g. using no/other transformation procedures).
 
 ### helper functions for the dataset preprocessing procedure ###
 
@@ -115,6 +135,8 @@ iqr_outlier <- function(variable, thresh = 3.0, name) {
 # this is a naive implementation that can be customized if other outlier removal methods are tested out
 # Note that for the IQR-outlier removal procedure, the outliers are removed by task
 remove_outliers <- function (data, method, thresh = 3.0) {
+  
+  thresh <- as.double(thresh)
 
   # get the number of datapoints
   num_datapoints <- nrow(data)
@@ -132,7 +154,7 @@ remove_outliers <- function (data, method, thresh = 3.0) {
     # all rows, which include at least one outlier in any column, then remove those from the dataset (plus the
     # created outlier column)
     data$outlier <- rowSums(sapply(colnames(data[ivs]), function (x) iqr_outlier(data[[x]], thresh = thresh, x)))
-    data <- data %>% filter(outlier == 0) %>% select(-outlier)
+    data <- data %>% filter(outlier == 0) %>% dplyr::select(-outlier)
 
   } else {
     stop("Chosen method is not specified")
@@ -145,95 +167,105 @@ remove_outliers <- function (data, method, thresh = 3.0) {
 
 }
 
-
-# simple helper to standardize across a selected list of variables
+# function to standardize across selected variables
 standardize_across_variables <- function (data, vars) {
-
-    data <- data %>%
-      # mutate the selected dv columns and standardize them by the entire sample
-      mutate(across(.cols = all_of(vars),
-                    ~ (.x - mean(.x)) / sd(.x)))
-                    # .names = "{.col}_sample_std")) to create new columns for the standardized variables
+  
+  data <- data %>%
+    # mutate the selected dv columns and standardize them by the entire sample
+    mutate(across(.cols = all_of(vars),
+                  ~ (.x - mean(.x)) / sd(.x))) %>%
+    # note that the by participant standardization produces NaNs for the locksreen variables because for some
+    # participants, the standard deviation is 0. Therefore, replace the NaNs with 0s
+    mutate(across(.cols = all_of(vars),
+                  ~ replace(., is.nan(.), 0)))
   # return the mutated dataframe
   return(data)
+}
+
+# function to perform the rank-based inverse normal transformation for the
+# mouse usage features and target variable following the formular of
+# Bishara, A. J., & Hittner, J. B. (2012). Testing the significance of a correlation
+# with nonnormal data: comparison of Pearson, Spearman, transformation, and 
+# resampling approaches. Psychological Methods, 17(3), 399-417.
+# https://doi.org/10.1037/a0028087
+rank_based_inverse_normal_transform <- function(x)
+{
+  qnorm((rank(x, na.last = "keep") - 0.5) / sum(!is.na(x)))
 }
 
 # initialize the dataset list that will iterated in the data analysis step
 dataset_list <- list()
 
-# create the combination of all data preprocessing options: the outlier removal procedure with 2 different threshold
-# for the iqr removal procedure & the sample that the preprocessing is applied to (the entire sample or per participant)
-outlier_options <- list(a=c(method="cutoff", thresh=NULL), b=c(method="iqr_out", thresh=2.5), c=c(method="iqr_out", thresh=3.5))
-transform_use <- c("by_sample", "by_participant")
-data_preprocessing_combinations <- expand.grid(outlier_options, transform_use)
-data_preprocessing_combinations <- data_preprocessing_combinations %>% unnest_wider(Var1)
+# list all the outlier removal procedures
+outlier_options <- list(a=c(method="cutoff", thresh=0), b=c(method="iqr_out", thresh=2.5), c=c(method="iqr_out", thresh=3.5))
 
 # loop the options by row, create a dataset for each option combination and add the dataset to the datasets list
-for (row in seq_len(nrow(data_preprocessing_combinations))) {
+for (option in outlier_options) {
 
   # get the raw data
   data_to_transform <- mouseTaskData
 
-  # get the preprocessing options
-  out_method <- data_preprocessing_combinations$method[row]
-  out_thresh <- as.numeric(data_preprocessing_combinations$thresh[row])
-  sample_to_use <- data_preprocessing_combinations$Var2[row]
-
-  print(paste0("Creating Dataset applying the transformations ", sample_to_use, " with out method: ", out_method,
+  # get the outlier method and threshold (for IQR)
+  out_method <- option[["method"]]
+  out_thresh <- option[["thresh"]]
+  
+  print(paste0("Creating a Dataset with outlier method: ", out_method,
                " and threshold", out_thresh))
 
   # data transformation for all datasets
 
   # Step 1: Remove outliers by task & standarize the ivs by the task to linear equate potential task differences
   data_to_transform <- mouseTaskData %>%
-    # first, remove the outliers per participant (grouped)
+    # first, remove the outliers per task (grouped)
     group_by(taskNum) %>%
     group_modify(~ remove_outliers(data = ., method = out_method, thresh = out_thresh)) %>%
-    # second, standardize all ivs by the task (linear equate)
-    standardize_across_variables(data = ., vars = ivs) %>%
     # finally, ungroup
     ungroup()
-
-  # Step 2: Standardize the ivs by the selected standardization option (by sample or by participant)
-  if (sample_to_use == "by_sample") {
-    data_to_transform <- data_to_transform %>%
-      # standardize across all the independent variables using the entire sample as the standardization reference
-      standardize_across_variables(., ivs)
-    # if the preprocessing is done by participant
-  } else if (sample_to_use == "by_participant") {
-    data_to_transform <- data_to_transform %>%
-      # standardize the ivs by participant
-      group_by(ID) %>%
-      standardize_across_variables(., ivs) %>%
-      ungroup()
-  } else {
-    stop("Something went wrong, data preprocessing stopped")
-  }
-
-  # Step 3: also standardize the covariates (timestamp needs to be standardized by person, all other lvl 2
-  # (person) covariates need to be standardized by the sample
+  
+  # Step 2: Linear Equate all Ivs by the mouse task
   data_to_transform <- data_to_transform %>%
-    standardize_across_variables(., covariates[!  covariates %in% "timestamp"]) %>%
-    # now group by person and standardize the timestamp
-    group_by(ID) %>%
-    standardize_across_variables(., "timestamp") %>%
+    group_by(taskNum) %>%
+    # second, standardize all ivs by the task (linear equate)
+    standardize_across_variables(data = ., vars = ivs) %>%
     ungroup()
 
-  # Step 4: remove highly correlated features from the dataset
+  # Step 3: remove highly correlated features from the dataset
   # create a correlation table of all ivs
-  corr_table <- data_to_transform %>% select(all_of(ivs)) %>% cor(.)
+  corr_table <- data_to_transform %>% dplyr::select(all_of(ivs)) %>% cor(.)
   # find the index of all bivariate correlations above the specified threshold using the caret::findCorrelation func
   # https://www.rdocumentation.org/packages/caret/versions/6.0-90/topics/findCorrelation
   index <- caret::findCorrelation(corr_table, .80, exact = FALSE)
   # get the names of the columns that will be removed
   to_be_removed <- colnames(corr_table)[index]
   # remove the columns from the dataframe
-  data_to_transform <- data_to_transform %>%  select(-to_be_removed)
+  data_to_transform <- data_to_transform %>%  dplyr::select(-to_be_removed)
+  
+  # get the remaining predictors
+  remaining_predictors <- ivs[ivs %in% colnames(data_to_transform)]
+  
+  # Step 4: Transform the IV and DV using rank-based inverse normal transformation
+  data_to_transform <- data_to_transform %>%
+    mutate(across(.cols = all_of(c(remaining_predictors, dvs)), rank_based_inverse_normal_transform))
+  
+  # Step 5: For every predictor, separate the predictor into its state and trait
+  # component -> the trait is the person mean of the predictor and the state
+  # is the person mean centered predictor variable
+  data_to_transform <- data_to_transform %>% 
+    add_column(demean(., select = c(remaining_predictors), group = "ID"))
 
-  # Step 5: add the transformed dataset to the list of all datasets
-  dataset_list[[paste0(sample_to_use, "_", out_method, out_thresh)]] <- data_to_transform
+  # Step 6: add the transformed dataset to the list of all datasets
+  dataset_list[[paste0(out_method, "_", out_thresh)]] <- data_to_transform
 
 }
+
+
+# -- Do a test visualization of the predictors and outcomes in one of the df --#
+
+options(device = "windows")
+
+dataset_list[[1]] %>% dplyr::select(all_of(ivs[ivs %in% colnames(dataset_list[[1]])])) %>% hist.data.frame(.)
+dataset_list[[1]] %>% dplyr::select(arousal, valence) %>% hist.data.frame(.)
+
 
 ###############################################################################################
 ############################# Mixed Models Analysis Code ######################################
@@ -281,7 +313,7 @@ plot_single_pred_mixed_model <- function (dataset, predictor, target) {
   # calculate the marginal effects between target and predictor per participant
   marg_effect_predictions <- dataset%>%
     group_by(ID) %>%
-    do(preds = ggpredict(glm(data = ., formula = as.formula(paste0(target, " ~ ", predictor, " + ", paste(covariates, collapse = "+"))),
+    do(preds = ggpredict(glm(data = ., formula = as.formula(paste0(target, " ~ ", predictor)),
                              family = "gaussian"), terms = predictor))
 
   # create a single dataset for plotting from the predicted marginal effects per group and add a group label
@@ -292,11 +324,11 @@ plot_single_pred_mixed_model <- function (dataset, predictor, target) {
     # add participant regression line
     geom_line(size = 1, alpha = 0.5) +
     # add the regression line of the total dataset when ignoring the grouped data structure
-    geom_line(data = ggpredict(glm(formula = as.formula(paste(target, " ~ ", predictor, " + ", paste(covariates, collapse = "+"))),
+    geom_line(data = ggpredict(glm(formula = as.formula(paste(target, " ~ ", predictor)),
                                    data = dataset, family = "gaussian"), terms = predictor),
               aes(x = x, y = predicted), colour = "black", size = 2) +
     # add the conf intervals of the regression line
-    geom_ribbon(data = ggpredict(glm(formula = as.formula(paste(target, " ~ ", predictor, " + ", paste(covariates, collapse = "+"))),
+    geom_ribbon(data = ggpredict(glm(formula = as.formula(paste(target, " ~ ", predictor)),
                                      data = dataset, family = "gaussian"), terms = predictor),
                 aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high, colour = NULL), alpha =0.2) +
     theme_light() +
@@ -311,13 +343,13 @@ plot_single_pred_mixed_model <- function (dataset, predictor, target) {
   print("Plotting the Fixed Effect Mixed Model")
   
   # calculate the fixed effect model first
-  fe_formular <- paste(target, '~', predictor, '+',paste(covariates, collapse = "+"), '+ (1|ID)')
+  fe_formular <- paste(target, '~', paste0(predictor, "_within"), '+',paste0(predictor, "_between"), '+ (1|ID)')
   fixed_effect_model <- lmer(formula = as.formula(fe_formular), data = dataset, REML = F, control=lmerControl(optimizer = "bobyqa"))
   
   # now plot it
-  ri_plot <- ggplot(data = ggpredict(fixed_effect_model, terms = c(predictor)), aes(x = x, y = predicted)) +
+  ri_plot <- ggplot(data = ggpredict(fixed_effect_model, terms = c(paste0(predictor, "_within"))), aes(x = x, y = predicted)) +
     # linear model for each participant with unique intercept
-    geom_line(data = ggpredict(fixed_effect_model, terms = c(predictor, "ID"), type = "re"),
+    geom_line(data = ggpredict(fixed_effect_model, terms = c(paste0(predictor, "_within"), "ID"), type = "re"),
               aes(x = x, y = predicted, colour = group),
               size = 1, alpha = 0.5) +
     # general trend of the random intercept model
@@ -333,13 +365,13 @@ plot_single_pred_mixed_model <- function (dataset, predictor, target) {
   print("Plotting the Random Slope Mixed Model")
   
   # calculate the random slope model first
-  re_formular <- paste(target, '~', predictor, '+', paste(covariates, collapse = "+"), '+ (1 + ', predictor, '|ID)')
+  re_formular <- paste(target, '~', paste0(predictor, "_within"), '+',paste0(predictor, "_between"), '+ (', paste0(predictor, "_within"), '|ID)')
   random_effect_model <- lmer(formula = as.formula(re_formular), data = dataset, REML = F, control=lmerControl(optimizer = "bobyqa"))
   
   # now plot it
-  rs_plot <- ggplot(data = ggpredict(random_effect_model, terms = c(predictor)), aes(x = x, y = predicted)) +
+  rs_plot <- ggplot(data = ggpredict(random_effect_model, terms = c(paste0(predictor, "_within"))), aes(x = x, y = predicted)) +
     # linear relationships for each participant
-    geom_line(data = ggpredict(random_effect_model, terms = c(predictor, "ID"), type = "re"),
+    geom_line(data = ggpredict(random_effect_model, terms = c(paste0(predictor, "_within"), "ID"), type = "re"),
               aes(x = x, y = predicted, colour = group),
               size = 1, alpha = 0.5) +
      # general trend of the random slope model
@@ -382,7 +414,7 @@ plot_single_pred_mixed_model <- function (dataset, predictor, target) {
 # model coefficients as well as model performance criteria
 fit_mixed_model <- function(dataset, model_formular, mod_name, plot_diag = F) {
   
-  cat(sprintf("Fitting the Model: %s\n", mod_name))
+  # cat(sprintf("Fitting the Model: %s\n", mod_name))
   
   # fit the model with the specified formular
   mod <- lmer(formula = as.formula(model_formular), data = dataset, REML = F, control=lmerControl(optimizer="bobyqa"))
@@ -390,14 +422,20 @@ fit_mixed_model <- function(dataset, model_formular, mod_name, plot_diag = F) {
   # if specified, get model diagnostic visualizations
   if (plot_diag) {model_diagnostic_plots(model = mod, filename = mod_name, data = dataset) }
   
-  # calculate the model coefficients
+  # grab the model coefficients
   coefficients <- broom.mixed::tidy(mod, conf.int = T, conf.method = "Wald")
+  
+  # calculate standardized model coefficients using the parameters package
+  # which implements a method from Hoffman, 2015
+  # get standardized model parameters
+  standardized_coeffs <- parameters::standardise_parameters(mod, method = "pseudo", ci_method = "Wald")
   
   # calculate the model performance criteria
   model_diag <- performance::model_performance(mod)
   
-  # return the model coefficients and the performance criteria in a list
-  list(coeffs = coefficients, model_diag = model_diag)
+  # return the model, the model coefficients and the performance criteria in a list
+  list(mod = mod, coeffs = coefficients, std_coeffs=standardized_coeffs,
+       model_diag = model_diag)
   
 }
 
@@ -426,33 +464,29 @@ get_sample_data <- function (dset = NULL, target = NULL, predictor = NULL) {
 
 }
 
-# get a random dataset
+# get a random dataset, the predictor and the target
 rng_play_dat <- get_sample_data()
+rng_pred <- rng_play_dat[["pred"]]
+rng_target <- rng_play_dat[["target"]]
 
 # Try out the model functions with the randomly generated data
 
 # icc model results (create and save a model fit plot)
 play_icc_mod_results <-  fit_mixed_model(dataset = rng_play_dat[["dset"]][[1]],
-                                         model_formular = paste(rng_play_dat[["target"]], '~', '1 + (1|ID)'),
-                                         mod_name = paste0("NullMod_", rng_play_dat[["target"]], "_" ,names(rng_play_dat["dset"][[1]])),
+                                         model_formular = paste(rng_target, '~', '1 + (1|ID)'),
+                                         mod_name = paste0("NullMod_", rng_target, "_" ,names(rng_play_dat["dset"][[1]])),
                                          plot_diag = T)
 
-# baseline model results
-play_baseline_results <- fit_mixed_model(dataset = rng_play_dat[["dset"]][[1]],
-                                        model_formular = paste(rng_play_dat[["target"]], '~', paste(covariates, collapse = "+"), ' + (1|ID)'),
-                                        mod_name = paste0("BaselineMod_", rng_play_dat[["target"]], "_", names(rng_play_dat["dset"][[1]])),
-                                        plot_diag = T)
-
 # single predictor model results (with plots)
-play_sing_pred_res <- fit_mixed_model(dataset = rng_play_dat[["dset"]][[1]],
-                                      model_formular = paste(rng_play_dat[["target"]], '~', rng_play_dat[["pred"]], '+',paste(covariates, collapse = "+"), '+ (1|ID)'),
-                                      mod_name = paste0("FixedEffMod_", rng_play_dat[["target"]], "_", rng_play_dat[["pred"]], "_", names(rng_play_dat["dset"][[1]])),
+play_sing_pred_fixed <- fit_mixed_model(dataset = rng_play_dat[["dset"]][[1]],
+                                      model_formular = paste(rng_target, '~', paste0(rng_pred, "_within"), "+", paste0(rng_pred, "_between"), '+ (1|ID)'),
+                                      mod_name = paste0("FixedEffMod_", rng_target, "_", rng_pred, "_", names(rng_play_dat["dset"][[1]])),
                                       plot_diag = T)
 
 # single predictor model results (with plots)
-play_sing_pred_res <- fit_mixed_model(dataset = rng_play_dat[["dset"]][[1]],
-                                      model_formular = re_form <- paste(rng_play_dat[["target"]], '~', rng_play_dat[["pred"]], '+', paste(covariates, collapse = "+"), '+ (1 + ', rng_play_dat[["pred"]], '|ID)'),
-                                      mod_name = paste0("RandSlopeMod_", rng_play_dat[["target"]], "_", rng_play_dat[["pred"]], "_", names(rng_play_dat["dset"][[1]])),
+play_sing_pred_slope <- fit_mixed_model(dataset = rng_play_dat[["dset"]][[1]],
+                                      model_formular = re_form <- paste(rng_target, '~', paste0(rng_pred, "_within"), "+", paste0(rng_pred, "_between"), '+ (', paste0(rng_pred, "_within"), '|ID)'),
+                                      mod_name = paste0("RandSlopeMod_", rng_target, "_", rng_pred, "_", names(rng_play_dat["dset"][[1]])),
                                       plot_diag = T)
 
 # create a plot of the effect of the predictor on the outcome variable
@@ -461,20 +495,13 @@ plot_single_pred_mixed_model(dataset = rng_play_dat[["dset"]][[1]],
                              target = rng_play_dat[["target"]])
 
 
-###############################
-### Model Calculation Loops ###
-###############################
+##############################
+### Model Calculation Loop ###
+##############################
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! # 
-# !!!!!!! NEEDS A REWORK ONCE THE FINAL MODELS ARE SPECIFIED !!!!!!! 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! # 
+# TODO: Also get the ICC values of the mouse usage features as descriptive stats?
 
-ri_form <- paste(target, '~', '1 + (1|ID)')
-bs_form <- paste(target, '~', paste(covariates, collapse = "+"), ' + (1|ID)')
-fe_form <- paste(target, '~', predictor, '+',paste(covariates, collapse = "+"), '+ (1|ID)')
-re_form <- paste(target, '~', predictor, '+', paste(covariates, collapse = "+"), '+ (1 + ', predictor, '|ID)')
-
-# This section includes the loops to calculate all specified models using the data analysis helper functions
+# This section includes the loop to calculate all specified models using the data analysis helper functions
 # Note that each loop involves multiple model calculations and can take some time.
 # See the "Playground" section for options to calculate single models for selected dataframes, model specifications
 # and variables
@@ -485,44 +512,99 @@ save_model_results <- function (model_list) {
   lapply(names(model_list), function (x) write.csv(x=model_list[[x]], file = paste0(x, ".csv"), row.names = F))
 }
 
+# setup lists to store the model result of the loops
+ri_coeff_list <- list()
+ri_diag_list <- list()
 
-####################################
-### Random Intercept Model Loops ###
-####################################
+fe_coeff_list <- list()
+fe_std_coeff_list <- list()
+fe_diag_list <- list()
 
-# setup a list to save the data from the variable each loop
-# TODO: Writing out all code is tideous, prone for errors and not flexible. Could be replaced by a smarter solution (e.g a loop)
-ri_coefficients_list <- list()
-ri_model_diagnostics_list <- list()
+rs_coeff_list <- list()
+rs_std_coeff_list <- list()
+rs_diag_list <- list()
+
+model_comparison <- list()
+
 
 # loop over all dataframes
 for (i in seq_along(dataset_list)) {
-  name <- names(dataset_list[i])
-  dframe <- dataset_list[[i]]
+  dset_name <- names(dataset_list[i])
+  dset <- dataset_list[[i]]
   # loop over all dependent variables
   for (dv in dvs) {
-    mod_name <- paste0("RandIntMod_", dv, "_", name)
-    print(name)
-    ri_form <- paste(dv, '~', '1 + (1|ID)')
-    # calculate the random intercept model results
-    ri_results <- fit_mixed_model(dataset = dframe, model_formular = ri_form, mod_name = mod_name)
-    # extract the results and add information about the dataset and the dv to them
-    coeffs <- ri_results[["coeffs"]] %>% mutate(dv = dv, dframe = name)
-    diag <- ri_results[["model_diag"]] %>% mutate(dv = dv, dframe = name)
-    # add the coefficient results to the list
-    ri_coefficients_list[[paste0(name, "_", dv)]] <- coeffs
-    # add the model diagnostic results to the list
-    ri_model_diagnostics_list[[paste0(name, "_", dv)]] <- diag
-
+    print(paste("Calculating the ICC Model for dataset", dset_name, "and target", dv))
+    
+    # first calculate the random intercept model for the outcome variable
+    icc_model <- fit_mixed_model(dataset = dset,
+                                 model_formular = paste(dv, '~', '1 + (1|ID)'),
+                                 mod_name = paste0("NullMod_", dv, "_" , dset_name),
+                                 plot_diag = F)
+    # extract the results from the model, add the info about the dv and dataset
+    icc_coeffs <- icc_model[["coeffs"]] %>% mutate(dv = dv, dframe = dset_name)
+    icc_diag <- icc_model[["model_diag"]] %>% mutate(dv = dv, dframe = dset_name)
+    # save them in the list
+    ri_coeff_list[[paste0(dset_name, "_", dv)]] <- icc_coeffs
+    ri_diag_list[[paste0(dset_name, "_", dv)]] <- icc_diag
+    
+    # next, loop all predictors and calculate the predictor models
+    # to do so, first get the name of the remaining predictors in the dataset
+    # after preprocessing
+    remaining_ivs <- ivs[ivs %in% colnames(dset)]
+    # next, loop the remaining ivs
+    for (iv in remaining_ivs) {
+      print(paste("Calculating the models predictor", iv, " in dataset", dset_name, "and target", dv))
+      # calculate the fixed effect model first
+      fe_model <- fit_mixed_model(dataset = dset,
+                                  model_formular = paste(dv, '~', paste0(iv, "_within"), "+", paste0(iv, "_between"), '+ (1|ID)'),
+                                  mod_name = paste0("FE_Mod", iv, "_", dv, "_" , dset_name),
+                                  plot_diag = F)
+      # calculate the random effect model second
+      rs_model <- fit_mixed_model(dataset = dset,
+                                  model_formular = paste(dv, '~', paste0(iv, "_within"), "+", paste0(iv, "_between"), '+ (', paste0(iv, "_within"), '|ID)'),
+                                  mod_name = paste0("RE_Mod", iv, "_", dv, "_" , dset_name),
+                                  plot_diag = F)
+      
+      # Again, extract the infos from the models and save them in the lists
+      fe_coeffs <- fe_model[["coeffs"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      fe_std_coeffs <- fe_model[["std_coeffs"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      fe_diag <- fe_model[["model_diag"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      fe_coeff_list[[paste0(iv, "_", dset_name, "_", dv)]] <- fe_coeffs
+      fe_std_coeff_list[[paste0(iv, "_", dset_name, "_", dv)]] <- fe_std_coeffs
+      fe_diag_list[[paste0(iv, "_", dset_name, "_", dv)]] <- fe_diag
+      
+      rs_coeffs <- rs_model[["coeffs"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      rs_std_coeffs <- rs_model[["std_coeffs"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      rs_diag <- rs_model[["model_diag"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      rs_coeff_list[[paste0(iv, "_", dset_name, "_", dv)]] <- rs_coeffs
+      rs_std_coeff_list[[paste0(iv, "_", dset_name, "_", dv)]] <- rs_std_coeffs
+      rs_diag_list[[paste0(iv, "_", dset_name, "_", dv)]] <- rs_diag
+      
+      # finally, compare the nested models
+      comparison <- performance::test_performance(icc_model[["mod"]],
+                                                  fe_model[["mod"]],
+                                                  rs_model[["mod"]]) %>%
+        mutate(iv = iv, dv = dv, dframe = dset_name)
+      # and add the it to the results list
+      model_comparison[[paste0(iv, "_", dset_name, "_", dv)]] <- comparison
+      
+    }
   }
 }
 
 # convert each list to a "final results" dataframe and save the final results in a list
-ri_results <- list("Task_results_ri_coeffs" = dplyr::bind_rows(ri_coefficients_list),
-                   "Task_results_ri_diag" = dplyr::bind_rows(ri_model_diagnostics_list))
+mouse_task_results <- list("Task_results_ri_coeffs" = dplyr::bind_rows(ri_coeff_list),
+                   "Task_results_ri_diag" = dplyr::bind_rows(ri_diag_list),
+                   "Task_results_fe_coeffs" = dplyr::bind_rows(fe_coeff_list),
+                   "Task_results_fe_std_coeffs" = dplyr::bind_rows(fe_std_coeff_list),
+                   "Task_results_fe_diag" = dplyr::bind_rows(fe_diag_list),
+                   "Task_results_rs_coeffs" = dplyr::bind_rows(rs_coeff_list),
+                   "Task_results_rs_std_coeffs" = dplyr::bind_rows(rs_std_coeff_list),
+                   "Task_results_rs_diag" = dplyr::bind_rows(rs_diag_list),
+                   "Task_results_model_comparison" = dplyr::bind_rows(model_comparison))
 
 # save the results as csv files
-save_model_results(ri_results)
+save_model_results(mouse_task_results)
 
 # If already Calculated: Import the results from the CSV files instead of running the loop
 ri_results <- list(
@@ -530,108 +612,73 @@ ri_results <- list(
   "Task_results_ri_diag" = read.csv("Mouse_Task_Results/Mixed_Models/Random_Intercept/Task_results_ri_diag.csv")
 )
 
-############################
-### Baseline Model Loops ###
-############################
+#################
+### Test Loop ###
+#################
 
-baseline_coefficients_list <- list()
-baseline_model_diagnostics_list <- list()
+# run a test loop in order to compare the results of the within-between separated
+# predictors and the original predictor (only use one dataset and one outcome here)
+
+test_coeff_list <- list()
+test_coeff_std_list <- list()
 
 # loop over all dataframes
 for (i in seq_along(dataset_list)) {
-  name <- names(dataset_list[i])
-  dframe <- dataset_list[[i]]
+  dset_name <- names(dataset_list[i])
+  dset <- dataset_list[[i]]
   # loop over all dependent variables
   for (dv in dvs) {
-    print(paste0("Baseline Model for target: ", dv, " and dataset: ", name))
-    model_family <- if (dv == "stress") "binomial" else "gaussian"
-    # calculate the random intercept model results
-    baseline_results <- baseline_model(dframe, dv, model_family = model_family, plot_diag = F)
-    # extract the results and add information about the dataset and the dv to them
-    coeffs <- baseline_results[["coeffs"]] %>% mutate(dv = dv, dframe = name)
-    diag <- baseline_results[["model_diag"]] %>% mutate(dv = dv, dframe = name)
-    # add the coefficient results to the list
-    baseline_coefficients_list[[paste0(name, "_", dv)]] <- coeffs
-    # add the model diagnostic results to the list
-    baseline_model_diagnostics_list[[paste0(name, "_", dv)]] <- diag
-
-  }
-}
-
-# convert each list to a "final results" dataframe and save the final results in a list
-baseline_results <- list("Task_results_baseline_coeffs" = dplyr::bind_rows(baseline_coefficients_list),
-                         "Task_results_baseline_diag" = dplyr::bind_rows(baseline_model_diagnostics_list))
-
-# save the results as csv files
-save_model_results(baseline_results)
-
-# If already Calculated: Import the results from the CSV files instead of running the loop
-baseline_results <- list(
-   "Task_results_baseline_coeffs" = read.csv("Mouse_Task_Results/Mixed_Models/Baseline/Task_results_baseline_coeffs.csv"),
-  "Task_results_baseline_diag" = read.csv("Mouse_Task_Results/Mixed_Models/Baseline/Task_results_baseline_diag.csv")
-)
-
-
-###################################
-### Single Predictor Model Loop ###
-###################################
-
-#TODO: This takes very long to process and should probably be parallized
-
-# setup lists to save all results from the single predictor model analysis
-single_pred_fixed_effect_coeff_list <- list()
-single_pred_fixed_effect_diag_list <- list()
-single_pred_random_effect_coeff_list <- list()
-single_pred_random_effect_diag_list <- list()
-
-# loop over all dataframes
-for (i in seq_along(dataset_list)) {
-  name <- names(dataset_list[i])
-  dframe <- dataset_list[[i]]
-  # get all ivs that remained in the selected dataframe after removal of collinear features
-  remaining_ivs <- ivs[ivs %in% colnames(dframe)]
-  # loop over the specified dependent variables
-  for (dv in dvs) {
-    model_family <- if (dv == "stress") "binomial" else "gaussian"
-    # loop over all remaining independent variables
+    # get remaining ivs
+    remaining_ivs <- ivs[ivs %in% colnames(dset)]
+    # next, loop the remaining ivs
     for (iv in remaining_ivs) {
-      print(paste0("Singple Pred Model for target: ", dv, "; pred: ", iv, "; and dataset: ", name))
-      # get the results of the single predictor model analysis
-      sing_pred_results <- single_predictor_model(dataset = dframe, target = dv, predictor = iv,
-                                                  model_family = model_family, plot_diag = F, plot_model = F)
-      # extract the results, add relevant info to them
-      sp_fe_coff <- sing_pred_results[["fe_coeffs_sp"]] %>% mutate(dv = dv, iv = iv, dframe = name)
-      sp_fe_diag <- sing_pred_results[["fe_diag_sp"]] %>% mutate(dv = dv, iv = iv, dframe = name)
-      sp_re_coff <- sing_pred_results[["re_coeffs_sp"]] %>% mutate(dv = dv, iv = iv, dframe = name)
-      sp_re_diag <- sing_pred_results[["re_diag_sp"]] %>% mutate(dv = dv, iv = iv, dframe = name)
-      # add all results to the corresponding list
-      single_pred_fixed_effect_coeff_list[[paste0(name, "_", iv, "_", dv)]] <- sp_fe_coff
-      single_pred_fixed_effect_diag_list[[paste0(name, "_", iv, "_", dv)]] <- sp_fe_diag
-      single_pred_random_effect_coeff_list[[paste0(name, "_", iv, "_", dv)]] <- sp_re_coff
-      single_pred_random_effect_diag_list[[paste0(name, "_", iv, "_", dv)]] <- sp_re_diag
+      print(paste("Calculating the models predictor", iv, " in dataset", dset_name, "and target", dv))
+      # calculate the fixed effect model first
+      test_model <- fit_mixed_model(dataset = dset,
+                                  model_formular = paste(dv, '~', iv, '+ (1|ID)'),
+                                  mod_name = paste0("FE_Mod", iv, "_", dv, "_" , dset_name),
+                                  plot_diag = F)
+      
+      # Again, extract the infos from the models and save them in the lists
+      test_coeffs <- test_model[["coeffs"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      test_coeffs_std <- test_model[["std_coeffs"]] %>% mutate(iv = iv, dv = dv, dframe = dset_name)
+      test_coeff_list[[paste0(iv, "_", dset_name, "_", dv)]] <- test_coeffs
+      test_coeff_std_list[[paste0(iv, "_", dset_name, "_", dv)]] <- test_coeffs_std
+      
     }
+    break
   }
+  break
 }
 
 # convert each list to a "final results" dataframe and save the final results in a list
-single_pred_results <- list(
-  "Task_results_sp_fe_coeffs" = dplyr::bind_rows(single_pred_fixed_effect_coeff_list),
-  "Task_results_sp_fe_diag" = dplyr::bind_rows(single_pred_fixed_effect_diag_list),
-  "Task_results_sp_re_coeffs" = dplyr::bind_rows(single_pred_random_effect_coeff_list),
-  "Task_results_sp_re_diag" = dplyr::bind_rows(single_pred_random_effect_diag_list)
-)
+test_results <- dplyr::bind_rows(test_coeff_list)
+test_results_std <- dplyr::bind_rows(test_coeff_std_list)
 
-# save the results as a csv
-save_model_results(single_pred_results)
+# filter the relevant rows, and get the results that will be compared with the
+# test results and use the same filtering aswell
 
-# If already Calculated: Import the results from the CSV files instead of running the loop
-single_pred_results <- list(
-  "Task_results_sp_fe_coeffs" = read.csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_fe_coeffs.csv"),
-  "Task_results_sp_fe_diag" = read.csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_fe_diag.csv"),
-  "Task_results_sp_re_coeffs" = read.csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_re_coeffs.csv"),
-  "Task_results_sp_re_diag" = read.csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_re_diag.csv")
-)
+test_results <- test_results %>% 
+  dplyr::filter(., grepl("fixed", effect)) %>%
+  dplyr::filter(., !grepl("Intercept", term)) %>%
+  dplyr::select(estimate, p.value, term)
+  
+compare_with_test <- mouse_task_results[["Task_results_fe_coeffs"]] %>%
+  dplyr::filter(., grepl("fixed", effect)) %>%
+  dplyr::filter(., !grepl("Intercept", term)) %>%
+  dplyr::filter(., grepl("arousal", dv)) %>%
+  dplyr::filter(., grepl("cutoff_0", dframe)) %>%
+  dplyr::select(estimate, p.value, term)
+                  
+write.csv(test_results, "Orig_Pred.csv", row.names=FALSE)
+write.csv(compare_with_test, "Within_Between_Pred.csv", row.names=FALSE)
 
+
+compare_with_test_std <- mouse_task_results[["Task_results_fe_std_coeffs"]] %>%
+  dplyr::filter(., grepl("within|between", Parameter)) %>%
+  dplyr::filter(., grepl("arousal", dv)) %>%
+  dplyr::filter(., grepl("cutoff_0", dframe)) %>%
+  dplyr::select(Std_Coefficient, Parameter)
 
 
 #############################
@@ -830,3 +877,13 @@ for (target in dvs) {
                              dot_size = .75)
 
 }
+
+
+###############################################################################
+######## Additional Analysis to look at covariates ############################
+###############################################################################
+
+
+# list the covariates that will be included in the mixed models
+covariates <- c('hand', 'sex' 'age','timestamp', 'zoom', 'screen_width', 
+                'screen_height', 'median_sampling_freq')

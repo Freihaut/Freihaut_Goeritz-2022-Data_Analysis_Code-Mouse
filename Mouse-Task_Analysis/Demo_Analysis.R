@@ -5,10 +5,8 @@ Test file for inspecting the analysis with Julius
 # package import
 library(lme4)
 library(lmerTest)
-library(parameters)
 library(tidyverse)
-library(sjstats)
-library(effects)
+library(easystats)
 library(broom.mixed)
 library(ggeffects)
 library(texreg)
@@ -18,6 +16,79 @@ library(multilevelTools)
 library(sjPlot)
 library(sjmisc)
 library(sjlabelled)
+library(merTools)
+
+
+# -- Run Analysis with a Toy Dataset -- #
+
+data(aces_daily, package = "JWileymisc")
+
+# add the within and between centered variables
+aces_daily <- aces_daily %>% add_column(demean(., select = c("STRESS", "NegAff"), group = "UserID"))
+
+
+# get the icc values of the IV and the DV as descriptive stat
+merTools::ICC(outcome = "NegAff", group = "UserID", data = aces_daily)
+merTools::ICC(outcome = "STRESS", group = "UserID", data = aces_daily)
+
+# now build the relevant models
+
+# helper function to get the model output
+model_infos <- function(mod) {
+  
+  # calculate the model coefficients
+  coefficients <- broom.mixed::tidy(mod, conf.int = T, conf.method = "Wald")
+  
+  # calculate the Intra-Class-Correlation (comes with the model diagnostic criterias)
+  performance_criteria <- performance::model_performance(mod)
+  
+  # get standardized coefficients?
+  std_coeffs <- standardise_parameters(mod, include_response = F, method = "pseudo")
+  
+  list(coeffs = coefficients, performance = performance_criteria, std_coeffs = std_coeffs)
+  
+}
+
+# regular model
+m1 <- lmer(NegAff ~ STRESS + (1| UserID), data = aces_daily)
+model_infos(m1)
+
+# model with demenead IVs
+m2 <-  lmer(NegAff ~ STRESS_between + STRESS_within + (1| UserID), data = aces_daily)
+model_infos(m2)
+
+# model with centered DV and centered IV
+m3 <- lmer(NegAff_within ~ STRESS_within + (1| UserID), data = aces_daily)
+broom.mixed::tidy(m3, conf.int = T, conf.method = "Wald")
+
+# model with mean Iv as additional predictor
+m4 <- lmer(NegAff ~ STRESS_within + NegAff_between + (1| UserID), data = aces_daily)
+broom.mixed::tidy(m4, conf.int = T, conf.method = "Wald")
+
+
+# -- Now Use the "real data" -- #
+
+# import the dataset
+# set the working directory to be able to read the data
+setwd("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis")
+
+# import the data
+real.data <- read.csv(file = 'Mouse_Task_Features.csv')
+
+hist(real.data$task_total_dist)
+
+# use the rank-based inverse normal transformation
+inormal <- function(x)
+{
+  qnorm((rank(x, na.last = "keep") - 0.5) / sum(!is.na(x)))
+}
+
+
+test <- inormal(real.data$task_total_dist)
+hist(test)
+
+hist(real.data$arousal)
+hist(inormal(real.data$arousal))
 
 # -- Helper Functions for mixed model analysis -- #
 
@@ -28,6 +99,8 @@ model_infos <- function(mod) {
   
   # calculate the model coefficients
   coefficients <- broom.mixed::tidy(mod, conf.int = T, conf.method = "Wald")
+  
+  test <- model_parameters()
   
   # calculate the Intra-Class-Correlation (comes with the model diagnostic criterias)
   performance_criteria <- performance::model_performance(mod)
@@ -88,7 +161,7 @@ ggplot(aces_daily, aes(x=NegAff)) +
 # most upcoming analysis are taken from:
 # https://philippmasur.de/2018/05/23/how-to-center-in-multilevel-models/#easy-footnote-5-242
 
-aces_daily <- aces_daily %>% 
+test <- aces_daily %>% 
   # center around the grand mean (do this for the predictor and the outcome)
   mutate(STRESS.grandMeanCent = STRESS-mean(STRESS, na.rm=TRUE),
          NegAff.grandMeanCent = NegAff-mean(NegAff, na.rm=TRUE)) %>%
@@ -96,11 +169,13 @@ aces_daily <- aces_daily %>%
   group_by(UserID) %>% 
     mutate(STRESS.persMean = mean(STRESS, na.rm=TRUE),
            STRESS.persMeanCent = STRESS-STRESS.persMean,
-           NegAff.persMean = mean (negAFF, na.rm=TRUE),
+           STRESS.CWC.STD = STRESS.persMeanCent / sd(STRESS, na.rm=TRUE),
+           NegAff.persMean = mean(NegAff, na.rm=TRUE),
            NegAff.persMeanCent = NegAff - mean(NegAff, na.rm=TRUE)) %>%
   ungroup %>%
   # Grand mean centering of the aggregated variable
-  mutate(STRESS.gmPersMeanCent = STRESS.persMean-mean(STRESS.persMean, na.rm=TRUE))
+  mutate(STRESS.gmPersMeanCent = STRESS.persMean-mean(STRESS.persMean, na.rm=TRUE),
+         STRESS.GMC.STD = STRESS.gmPersMeanCent / sd(STRESS.persMean, na.rm=TRUE))
 
 # get some info about the centered variables
 aces_daily %>% select(STRESS, STRESS.grandMeanCent, STRESS.persMeanCent, 
@@ -127,6 +202,35 @@ model_infos(m1.personMean)
 m1.personMean2 <- lmer(NegAff ~ STRESS.persMeanCent + STRESS.gmPersMeanCent + 
                          (1| UserID), data = aces_daily)
 model_infos(m1.personMean2)
+
+m1.std <- lmer(NegAff ~ STRESS.CWC.STD + STRESS.GMC.STD + 
+                 (1| UserID), data = aces_daily)
+
+model_infos(m1.std)
+
+library(easystats)
+abc <- standardise(m1.personMean2, method = "pseudo", include_response = F)
+abc1 <- standardise(m1.personMean2, method = "refit", include_response = F)
+
+model_infos(abc)
+model_infos(abc1)
+
+data("attitude")
+
+m <- lm(rating ~ complaints, data = attitude)
+
+model_parameters(m)
+
+test_data <- attitude %>% mutate(complaints.STD = scale(complaints)) 
+
+m1 <- lm(rating ~ complaints.STD, data = test_data)
+
+model_parameters(m1)
+
+m1.std <- standardize(m, include_response = F)
+
+summary(m1.std)
+summary(m1)
 
 # comparison table of models
 screenreg(list(m1.orig, m1.grandMean, m1.personMean, m1.personMean2), 
