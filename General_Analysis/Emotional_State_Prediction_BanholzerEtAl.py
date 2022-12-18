@@ -101,7 +101,7 @@ class CalculateSpeedAccInteraction(BaseEstimator, TransformerMixin):
         return X
 
 
-# Apply the standardscaler by group (or by the entire column if no group is specified) for a set of specified columns
+# Apply the standardscaler for a set of specified columns
 # from: https://stackoverflow.com/questions/68356000/how-to-standardize-scikit-learn-by-group
 class StandardizeByColumn(BaseEstimator, TransformerMixin):
     def __init__(self, sel_cols=None):

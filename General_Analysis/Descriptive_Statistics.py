@@ -10,6 +10,7 @@ For questions regarding the code, please contact: paul.freihaut@psychologie.uni-
 # package imports
 import gzip
 import json
+import random
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -17,138 +18,24 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import PowerTransformer
 from sklearn.preprocessing import scale
 import statsmodels.api as sm
+from scipy.stats import norm
 
 #%%
 
 # dataset imports
 
 # sociodemographic data of all participants
-# with gzip.open("Datasets_Raw/sociodem_dataset.json.gz", "rb") as f:
-#     sociodem_data = json.loads(f.read())
+with gzip.open("General_Analysis/sociodem_dataset.json.gz", "rb") as f:
+     sociodem_data = json.loads(f.read())
 
 # convert the dictionary into a pandas dataframe
-# sociodem_data = pd.DataFrame(sociodem_data).T
+sociodem_data = pd.DataFrame(sociodem_data).T
 
 # mousetask data (cleaned)
 mousetask_data = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Mouse_Task_Features.csv")
 
 # import the processed free mouse usage features
-# free_mouse_data = pd.read_csv("Free_Mouse_Features.csv")
-
-#%%
-
-# Need a proper place in the analysis file (or should be done in a previous step in the data processing pipeline?) #
-
-# create an order variable
-
-def add_order(x):
-    x = x.sort_values(by=["timestamp"])
-    x['order'] = range(len(x))
-    return x
-
-
-mousetask_data = mousetask_data.groupby("ID").apply(func=add_order)
-mousetask_data.reset_index(drop=True, inplace=True)
-
-
-#%%
-
-# Needs to be moved when everything is ready #
-
-# simple plot to visualize the relationship between the order (time) and a target variable for a randomly drawn
-# subset of participants
-def plot_habituation(data, target, name):
-
-    # select a subset of the dataset to make the plot a little bit better to view (there are more than 150 participants
-    # in the dataset, plotting them at once is too much
-
-    # specify the number of random IDs to draw
-    N = 12
-    # draw the random IDs and select the relevant data
-    random_ids = np.random.choice(data['ID'].unique(), N, replace=False)
-    selected_data = data[data['ID'].isin(random_ids)]
-
-    # create a scatter plot with a (linear) trend line between the order and the target var for each selected
-    # participant
-    sns.lmplot(data=selected_data, x="order", y=target, col="ID", height=3, facet_kws=dict(sharex=False, sharey=False))
-
-    plt.show()
-    # plt.savefig(name + "_" + target + '.png')
-
-
-# another simple plot to visualize the relationship between the order (time) and a target variable for a randomly drawn
-# subset of participants. This plot draws a lineplot for each (randomly selected) participant in the same plot
-def plot_habituation2(data, target, name):
-
-    # specificy the random number of participants that are drawn and plotted
-    N = 12
-    # draw the random IDs and select the relevant data
-    random_ids = np.random.choice(data['ID'].unique(), N, replace=False)
-    selected_data = data[data['ID'].isin(random_ids)]
-
-    # create a simple lineplot for each participant (as indicated by the HUE) in a different color
-    sns.lineplot(data=selected_data, x="order", y=target, hue="ID", lw=0.8)
-    # remove the legend
-    plt.legend([], [], frameon=False)
-
-    plt.show()
-    # plt.savefig(name + "_" + target + '.png')
-
-
-# run individual regression of order (time) on a target variable for each participant to test the (linear) effect of
-# order (time) on the target variable and plot the individual order effect coefficients and their confidence intervals
-def plot_habituation3(data, target, name):
-
-    # helper function to run a (linear) regression per participant
-    def _per_participant_regression(data, yvar, xvars):
-        # get the DV and IV variables
-        Y = data[yvar]
-        X = data[xvars]
-        # add an intercept to the model
-        X['intercept'] = 1.
-        # run the linear regression
-        result = sm.OLS(Y, X).fit()
-        # get the coefficient parameters and the confidence intervals
-        params = result.params.loc["order"]
-        ci = result.conf_int(alpha=0.05, cols=None).loc["order"]
-        ci.index = ['conf_low', 'conf_high']
-        # add both together and return them
-        ci["estimate"] = params
-        return ci
-
-    # Get the by participant regression coefficients and confidence intervals
-    participant_estimates = data.groupby('ID').apply(_per_participant_regression, target, ['order'])
-    participant_estimates.reset_index(drop=True, inplace=True)
-    # sort the values by their size for better plotting
-    participant_estimates = participant_estimates.sort_values(by=["estimate"])
-    # add an ID variable
-    participant_estimates["ID"] = range(len(participant_estimates))
-
-    # create the plot
-
-    # first, loop all participants and create a line of their confidence interval
-    for index, row in participant_estimates.iterrows():
-        plt.hlines(row["ID"], row["conf_low"], row["conf_high"], colors="blue", alpha=0.2)
-    # next, create a scatterplot of the estimate
-    sns.scatterplot(x="estimate", y="ID", data=participant_estimates, color="blue")
-    # finally, add a vertical line that indicates 0
-    plt.vlines(0, 0, len(participant_estimates), linestyles="dashed", colors="black")
-
-    plt.show()
-    # plt.savefig(name + "_" + target + '.png')
-
-#%%
-
-plot_habituation2(mousetask_data, "task_duration", "test")
-
-#%%
-
-plot_habituation(mousetask_data, "valence", "test")
-
-
-#%%
-
-plot_habituation(mousetask_data, "task_duration", "")
+free_mouse_data = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Free_Mouse_Features.csv")
 
 
 #%%
@@ -256,8 +143,8 @@ sample_descriptive(sociodem_data)
 # Info about the Number of Datasets are calculated in the mouse_Task_feature_calculation file, because duplicated
 # datasets needed to be removed, which requires the raw data
 
-#%%
 
+#%%
 
 # Info about the mouse task dataset
 # ---------------------------------
@@ -411,8 +298,23 @@ rename_dict = {
     'lockscreen_episodes:': 'Num. of Lockscreen Ep.',
     # valence and arousal
     'valence': ' Valence',
-    'arousal': 'Arousal'
+    'arousal': 'Arousal',
+    # Sociodemographic Variables
+    'zoom': 'Zoom',
+    'screen_width': ' Screen Width',
+    'screen_height': ' Screen Height',
+    'age': "Age",
+    'sex': 'Sex',
+    'hand': 'Hand'
 }
+
+
+# helper function to create an Order colummn in the dataset that indicates the number of Measure in the study
+# (i.e. the order variable shows the i th time the participant took part in the data collection)
+def add_order(x):
+    x = x.sort_values(by=["timestamp"])
+    x['Order'] = range(len(x))
+    return x
 
 
 # helper function to create a kdeplot of selected mouse usage features
@@ -435,7 +337,7 @@ def multi_kde_plot(data, name):
 
     for col, ax in zip(cols, axes):
         sns.set(font_scale=2.25)
-        sns.kdeplot(data=data, x=col, shade=True, ax=ax)
+        sns.kdeplot(data=data, x=col, fill=True, ax=ax)
         ax.set(title=col, xlabel=None, xticklabels=[], yticklabels=[])
 
     # delete the empty subplots
@@ -575,6 +477,16 @@ def standardize_cols(df, cols):
     return df
 
 
+# helper function to perform rank-based inverse normal transformation on a column in a pandas dataframe
+# see: https://agleontyev.netlify.app/post/rin_transform3/
+def rank_inverse_normal_transform(ds):
+    ds_rank = ds.rank()
+    numerator = ds_rank - 0.5
+    par = numerator/len(ds)
+    result = norm.ppf(par)
+    return result
+
+
 # helper function that mimics the caret package findCorrelation with setting exact = F
 # adapted from: https://stackoverflow.com/questions/41761332/translate-r-function-caretfindcorrelation-to-python-3-via-pandas-using-vectori
 def find_corr_vars(data, cutoff=0.8):
@@ -612,6 +524,103 @@ def find_corr_vars(data, cutoff=0.8):
 
     return to_delete
 
+
+# simple plot to visualize the relationship between the order (time) and a target variable for a randomly drawn
+# subset of participants
+def plot_habituation_multi_pars(data, target, name):
+
+    # select a subset of the dataset to make the plot a little bit better to view (there are more than 150 participants
+    # in the dataset, plotting them at once is too much
+
+    # set a figure size
+    # plt.figure(figsize=fig_size)
+    # set a scale size to scale all texts
+    sns.set(font_scale=1)
+    sns.set_style("white")
+
+    # specify the number of random IDs to draw
+    N = 12
+    # draw the random IDs and select the relevant data
+    random_ids = np.random.choice(data['ID'].unique(), N, replace=False)
+    selected_data = data[data['ID'].isin(random_ids)]
+
+    # create a scatter plot with a (linear) trend line between the order and the target var for each selected
+    # participant
+    sns.lmplot(data=selected_data, x="Order", y=target, col="ID", height=3, facet_kws=dict(sharex=False, sharey=False))
+
+    plt.show()
+    # plt.savefig(name + "_" + target + '.png')
+
+
+# another simple plot to visualize the relationship between the order (time) and a target variable for a randomly drawn
+# subset of participants. This plot draws a lineplot for each (randomly selected) participant in the same plot
+def plot_habituation_single_pars(data, target, name):
+
+    # set a scale size to scale all texts
+    sns.set(font_scale=0.85)
+    sns.set_style("white")
+
+    # specificy the random number of participants that are drawn and plotted
+    N = 12
+    # draw the random IDs and select the relevant data
+    random_ids = np.random.choice(data['ID'].unique(), N, replace=False)
+    selected_data = data[data['ID'].isin(random_ids)]
+
+    # create a simple lineplot for each participant (as indicated by the HUE) in a different color
+    sns.lineplot(data=selected_data, x="Order", y=target, hue="ID", lw=0.8)
+    # remove the legend
+    plt.legend([], [], frameon=False)
+
+    plt.show()
+    # plt.savefig(name + "_" + target + '.png')
+
+
+# run individual regression of order (time) on a target variable for each participant to test the (linear) effect of
+# order (time) on the target variable and plot the individual order effect coefficients and their confidence intervals
+def plot_habituation_all_pars(data, target, name):
+    # set a scale size to scale all texts
+    sns.set(font_scale=1)
+    sns.set_style("white")
+
+    # helper function to run a (linear) regression per participant
+    def _per_participant_regression(data, yvar, xvars):
+        # get the DV and IV variables
+        Y = data[yvar]
+        X = data[xvars]
+        # add an intercept to the model
+        X['intercept'] = 1.
+        # run the linear regression
+        result = sm.OLS(Y, X).fit()
+        # get the coefficient parameters and the confidence intervals
+        params = result.params.loc["Order"]
+        ci = result.conf_int(alpha=0.05, cols=None).loc["Order"]
+        ci.index = ['conf_low', 'conf_high']
+        # add both together and return them
+        ci["estimate"] = params
+        return ci
+
+    # Get the by participant regression coefficients and confidence intervals
+    participant_estimates = data.groupby('ID').apply(_per_participant_regression, target, ['Order'])
+    participant_estimates.reset_index(drop=True, inplace=True)
+    # sort the values by their size for better plotting
+    participant_estimates = participant_estimates.sort_values(by=["estimate"])
+    # add an ID variable
+    participant_estimates["ID"] = range(len(participant_estimates))
+
+    # create the plot
+
+    # first, loop all participants and create a line of their confidence interval
+    for index, row in participant_estimates.iterrows():
+        plt.hlines(row["ID"], row["conf_low"], row["conf_high"], colors="blue", alpha=0.2)
+    # next, create a scatterplot of the estimate
+    sns.scatterplot(x="estimate", y="ID", data=participant_estimates, color="blue")
+    # finally, add a vertical line that indicates 0
+    plt.vlines(0, 0, len(participant_estimates), linestyles="dashed", colors="black")
+
+    plt.show()
+    # plt.savefig(name + "_" + target + '.png')
+
+
 #%%
 
 # Mouse Task Descriptive Analysis
@@ -631,10 +640,16 @@ all_mouse_task_features = ['task_duration', 'clicks', 'task_total_dist', 'task_s
                            'trial_sd_angle_sd', 'trial_mean_x_flips', 'trial_sd_x_flips', 'trial_mean_y_flips',
                            'trial_sd_y_flips']
 
+control_vars = ['zoom', 'screen_width', 'screen_height', 'age', 'sex', 'hand', 'Order']
+
+# add the oder feature to the dataset
+mousetask_data = mousetask_data.groupby("ID", group_keys=False).apply(func=add_order)
+mousetask_data.reset_index(drop=True, inplace=True)
+
+
 #%%
 
 # in a first step. get a feeling for the distribution of the raw mouse usage features
-# do this for every pause threshold
 multi_kde_plot(mousetask_data.loc[:, all_mouse_task_features + ["valence", "arousal"]], 'mouse_task')
 
 # Most kde plots suggest a close to normal distribution for the mouse features, except the task time related features.
@@ -648,8 +663,9 @@ multi_kde_plot(mousetask_data.loc[:, all_mouse_task_features + ["valence", "arou
 # dataset (here, we get the descriptive stats about each dataset)
 
 # The preprocessing includes outlier removal (based on the mouse task), linear equating to adapt for differences in the
-# mouse usage parameters due to different mouse usage tasks and standardization. More specifically, we combine 3
-# outlier removal procedures with 2 standardization approaches
+# mouse usage parameters due to different mouse usage tasks and removal of redundant features.
+# To get a better sense for the stability of the results, we used three different outlier removal procedures and
+# created three different preprocessed datasets that will be analyzed
 # Note that this preprocessing routine is only one of many (and maybe potentially infinite) options. Other routines
 # could use different steps or choose other options within each step
 
@@ -662,6 +678,9 @@ outlier_options = ["all", 2.5, 3.5]
 
 # loop the outlier options to create the datasets
 for opt in outlier_options:
+
+    save_string = opt if opt == "all" else "iqr_" + str(opt)
+    print(f"Processing the dataset with outlier option {save_string}")
 
     # if all are selected
     if opt == "all":
@@ -677,17 +696,14 @@ for opt in outlier_options:
     dset = dset.groupby('taskNum').apply(
         lambda x: standardize_cols(x, all_mouse_task_features)).reset_index(drop=True)
 
-    # now standardize the mouse usage columns again, this time by the entire sample or by the participant
-    save_string = opt if opt == "all" else "iqr_" + str(opt)
-    # standardize by the entire sample
-    print(f"Processing dataset: {save_string + '_std_by_samp'}")
-    samp_dset = dset.copy()
-    mouse_task_datasets[save_string + "_std_by_samp"] = standardize_cols(samp_dset, all_mouse_task_features)
-    # standardize by participant
-    print(f"Processing dataset: {save_string + '_std_by_par'}")
-    par_dset = dset.copy()
-    mouse_task_datasets[save_string + "_std_by_par"] = par_dset.groupby('ID').apply(
-        lambda x: standardize_cols(x, all_mouse_task_features)).reset_index(drop=True)
+    # now remove highly correlated features to reduce the redundancies in the dataset
+    redundant_features = find_corr_vars(dset.loc[:, all_mouse_task_features], cutoff=0.8)
+    print(f"Number of removed collinear features: {len(redundant_features)}")
+    dset = dset.drop(redundant_features, axis=1)
+
+    # save the dataset in the list
+    mouse_task_datasets[save_string] = dset
+
 
 
 #%%
@@ -695,22 +711,23 @@ for opt in outlier_options:
 # get some basic information about the datasets after applying the outlier procedures (we skip every other dataset
 # because the information are the same independent of the standardization approach)
 for n, dset in enumerate(mouse_task_datasets):
-    if not n%2:
-        print(f"Len of Dataset: {dset}: {len(mouse_task_datasets[dset])}")
-        print(f"Descriptive stats about valence:\n{mouse_task_datasets[dset]['valence'].describe()}\n")
-        print(f"Descriptive stats about arousal:\n{mouse_task_datasets[dset]['arousal'].describe()}\n")
-        # 0 = No-stress, 1 = stress
-        print(f"Descriptive stats about stress:\n{mouse_task_datasets[dset]['stress'].value_counts()}\n")
-        print(f"Percentage of stress:\n"
-              f"{mouse_task_datasets[dset]['stress'].value_counts()[1] / mouse_task_datasets[dset]['stress'].value_counts()[0] * 100}\n")
-        plot_valence_arousal(mouse_task_datasets[dset], dset)
+    print(f"Len of Dataset: {dset}: {len(mouse_task_datasets[dset])}")
+    print(f"Descriptive stats about valence:\n{mouse_task_datasets[dset]['valence'].describe()}\n")
+    print(f"Descriptive stats about arousal:\n{mouse_task_datasets[dset]['arousal'].describe()}\n")
+    # 0 = No-stress, 1 = stress
+    print(f"Descriptive stats about stress:\n{mouse_task_datasets[dset]['stress'].value_counts()}\n")
+    print(f"Percentage of stress:\n"
+          f"{mouse_task_datasets[dset]['stress'].value_counts()[1] / mouse_task_datasets[dset]['stress'].value_counts()[0] * 100}\n")
+    plot_valence_arousal(mouse_task_datasets[dset], dset)
 
 #%%
 
-# plot the kde plots for all features
+# plot the kde plots for all datasets
 for dset in mouse_task_datasets:
-    print(f"all features Kde plots without collinear features for: {dset}")
-    multi_kde_plot(mouse_task_datasets[dset].loc[:, all_mouse_task_features + ["valence", "arousal"]], dset)
+    print(f"KDE plots for: {dset}")
+    # get the remaining task features
+    remaining_features = [feat for feat in all_mouse_task_features if feat in list(mouse_task_datasets[dset].columns)]
+    multi_kde_plot(mouse_task_datasets[dset].loc[:, remaining_features + ["valence", "arousal"]], dset)
 
 
 #%%
@@ -718,55 +735,72 @@ for dset in mouse_task_datasets:
 # plot a correlation heatmap for all datasets
 for dset in mouse_task_datasets:
     print(f"Correlation Heatmap for: {dset}")
-    correlation_heatmap(mouse_task_datasets[dset].loc[:, all_mouse_task_features + ["valence", "arousal"]],
-                        fig_size=(48,38), font_scale=3.8, name="all" + dset, add_text=False)
+    remaining_features = [feat for feat in all_mouse_task_features if feat in list(mouse_task_datasets[dset].columns)]
+    correlation_heatmap(mouse_task_datasets[dset].loc[:, control_vars + remaining_features + ["valence", "arousal"]],
+                        fig_size=(48,38), font_scale=3.2, name=dset, add_text=True)
 
 
 #%%
 
-# Because the number of mouse usage features is high and many of the features are highly correlated, using all
-# features for the data analysis might be redundant and having a smaller set of input features allows for more
-# clearly arranged results. Therefore, remove highly correlated features based on a set threshold
+# inspect the relationship between the order and outcome and predictor variables more closely to get a descriptive
+# feeling for a potential habituation effect throughout the study
 
-# get the redundant mouse usage features for each dataset
-redundant_task_feats = {}
+# Do this using data visualization
 
-for dset in mouse_task_datasets:
-    print(f"Remove collinear features for: {dset}")
-    redundant_features = find_corr_vars(mouse_task_datasets[dset].loc[:, all_mouse_task_features], cutoff=0.8)
-    print(f"{len(redundant_features)} Redundant features:\n{redundant_features}\n")
-    # save them in the dictionary
-    redundant_task_feats[dset] = redundant_features
+# doing this for all variables in all datasets is a little bit much, therefore, do it for (randomly) selected variables
+# in a randomly selected dataset (of course, it is also possible to select a target and dataset manually)
+rand_task_dset_name, rand_task_dset = random.choice(list(mouse_task_datasets.items()))
+random_target = random.choice([feat for feat in all_mouse_task_features if feat in rand_task_dset.columns] +
+                              ["valence", "arousal"])
 
 #%%
 
-# Print the Shape of the datasets without collinear features
-for dset in mouse_task_datasets:
-    print(f"Shape of Dataset: {dset} after corr removal\n{mouse_task_datasets[dset].drop(redundant_task_feats[dset], axis=1).shape}")
-
-
-#%%
-
-# create a correlation heatmap for each dataset without the redundant features
-for dset in mouse_task_datasets:
-    print(f"Heatmap without collinear features for: {dset}")
-    correlation_heatmap(mouse_task_datasets[dset].loc[:, all_mouse_task_features + ["valence", "arousal"]].drop(redundant_task_feats[dset], axis=1),
-                        fig_size=(48,38), font_scale=3.8, name="sel" + dset, add_text=True)
+# use the three different visualization approaches to descriptively check out the relationship between order and the
+# target
+plot_habituation_single_pars(rand_task_dset, random_target, rand_task_dset_name)
 
 #%%
+plot_habituation_multi_pars(rand_task_dset, random_target, rand_task_dset_name)
 
-# create a kde plot to show the distribution of the selected features
-for dset in mouse_task_datasets:
-    print(f"Kde plots without collinear features for: {dset}")
-    multi_kde_plot(mouse_task_datasets[dset].loc[:, all_mouse_task_features].drop(redundant_task_feats[dset], axis=1), dset)
+#%%
+plot_habituation_all_pars(rand_task_dset, random_target, rand_task_dset_name)
 
 
 #%%
 
-# create a pairplot for each dataset without the redundant features
+# In the KDE-Plots it was noticable that not all mouse usage features as well as the dependent variables did now always
+# follow a normal-distribution. One reviewer remarked that it might be better to transform the data before data analysis
+# to make it more norma-like. We therefore applied rank-based inverse normal transformation to the data before feeding
+# it into the mixed-level analysis. Here, use the transformation to check out how it changes the distribution (and
+# possibly correlations) of the features
+
+# loop the datasets to add the transformed features to each dataset
 for dset in mouse_task_datasets:
-    print(f"Pairplot without collinear features for: {dset}")
-    plot_pairplot(mouse_task_datasets[dset].loc[:, all_mouse_task_features].drop(redundant_task_feats[dset], axis=1), dset)
+    print(f"Transforming Features for Dataset: {dset}")
+    # get the remaining features in the dataset
+    remaining_features = [feat for feat in all_mouse_task_features if feat in list(mouse_task_datasets[dset].columns)]
+    # loop all remaining features and add the transformed features to the dataset
+    for feat in remaining_features + ["valence", "arousal"]:
+        mouse_task_datasets[dset][feat + "_trans"] = rank_inverse_normal_transform(mouse_task_datasets[dset][feat])
+
+#%%
+
+# create a kde plot for the transformed feature in each dataset
+for dset in mouse_task_datasets:
+    print(f"KDE plots after feature transformation: {dset}")
+    trans_features = [feat + "_trans" for feat in all_mouse_task_features if feat in list(mouse_task_datasets[dset].columns)]
+    multi_kde_plot(mouse_task_datasets[dset].loc[:, trans_features + ["valence_trans", "arousal_trans"]], dset)
+
+#%%
+
+# create a correlation heatmap for the transformed features in each dataset
+for dset in mouse_task_datasets:
+    print(f"Heatmap after feature transformation: {dset}")
+    trans_features = [feat + "_trans" for feat in all_mouse_task_features if
+                      feat in list(mouse_task_datasets[dset].columns)]
+    correlation_heatmap(mouse_task_datasets[dset].loc[:, control_vars + trans_features + ["valence_trans", "arousal_trans"]],
+                        fig_size=(48, 38), font_scale=3.2, name=dset, add_text=True)
+
 
 
 #%%
@@ -785,22 +819,13 @@ free_mouse_feats = ['recording_duration', 'movement_episodes', 'mo_ep_mean_episo
                     'mo_ep_sd_x_flips', 'mo_ep_mean_y_flips', 'mo_ep_sd_y_flips', 'movement_duration',
                     'movement_distance', 'no_movement', 'lockscreen_episodes:', "lockscreen_time"]
 
-# in a first step. get a feeling for the distribution of the raw mouse usage features
-# do this for every pause threshold
+control_vars = ['zoom', 'screen_width', 'screen_height', 'age', 'sex', 'hand', 'Order']
 
-pause_threshs = ["1000", "2000", "3000"]
+#%%
 
-# loop the pause thresholds and get the mouse usage data
-for thresh in pause_threshs:
-    dset = free_mouse_data.loc[:, [thresh + "_" + i if thresh + "_" + i in free_mouse_data.columns
-                               else i for i in free_mouse_feats] + ["valence", "arousal"]]
-    dset.columns = free_mouse_feats + ["valence", "arousal"]
-    # create a simple kde plot of each mouse usage parameter to get a feeling for its distribution
-    multi_kde_plot(dset, thresh + '_free_mouse_data')
-
-# The plots suggest a skewed distribution for most measures (few cases with more movement than the median). The skew
-# is much more prominent than for the mouse task features. Therefore, it makes sense to transform the mouse usage
-# data prior to the data analysis
+# add the order variable to the free mouse features datase
+free_mouse_data = free_mouse_data.groupby("ID", group_keys=False).apply(func=add_order)
+free_mouse_data.reset_index(drop=True, inplace=True)
 
 
 #%%
@@ -808,15 +833,19 @@ for thresh in pause_threshs:
 # similar to the mouse task, we create different datasets that will be analyzed because there exist different
 # preprocessing options. However, the preprocessing options are different from the mouse usage task.
 # Regarding free mouse usage, there is no "right" or "wrong" usage (such as not doing the task properly).
-# Therefore, no outlier trials are removed. The options for the free mouse usage are:
+# Therefore, no outlier trials are removed. In the free mouse dataset we used different pause thresholds:
 # - the pause threshold value that separates movement trials
 # (- a threshold about the required ammount of datapoints/logging time for each 5 minute interval)
 
 # create the free mouse usage datasets
 free_mouse_datasets = {}
 
+pause_threshs = ["1000", "2000", "3000"]
+
 # loop the thresholds and create the datasets
 for thresh in pause_threshs:
+
+    print(f"Processing the Dataset with a Pause Threshold of: {thresh}")
 
     # get the features for the specified threshold
     dset = free_mouse_data.loc[:, [thresh + "_" + i if thresh + "_" + i in free_mouse_data.columns
@@ -824,92 +853,101 @@ for thresh in pause_threshs:
     # rename the columns to exclude the thresh value
     dset.columns = free_mouse_feats
 
-    # perform a yeo-johnson transformation, because the data is heavily skewed (has a long tail)
-    # the yeo-johnson transformation was chosen, because some columns contain 0 values, which prohibits the common
-    # log transformation or other transformation procedures such as box-cox transformation. Sqrt transformation was
-    # considered, but still causes the data to have a long tail
-    power = PowerTransformer(method='yeo-johnson', standardize=False)
-    dset = power.fit_transform(dset)
-    # dset = np.sqrt(dset)
-
     # add all non mouse feature columns to the dset (concat the dataframe with a dataframe that only contains the
     # non feature columns, which are filtered out using a regular expression
     dset = pd.concat([pd.DataFrame(dset, columns=free_mouse_feats), free_mouse_data[free_mouse_data.columns.drop(
         list(free_mouse_data.filter(regex='|'.join(free_mouse_feats))))]], axis=1)
 
-    # rename the
+    # remove highly correlated mouse features from the dataset
+    redundant_features = find_corr_vars(dset.loc[:, free_mouse_feats], cutoff=0.8)
+    print(f"Number of removed collinear features: {len(redundant_features)}")
+    dset = dset.drop(redundant_features, axis=1)
 
-    # similar to the mouse task dataset creation, standardize by task or standardize by participant
-    print(f"Processing dataset: {thresh + '_std_by_samp'}")
-    samp_dset = dset.copy()
-    free_mouse_datasets[thresh + "_std_by_samp"] = standardize_cols(samp_dset, free_mouse_feats)
-    # standardize by participant
-    print(f"Processing dataset: {thresh + '_std_by_par'}")
-    par_dset = dset.copy()
-    free_mouse_datasets[thresh + "_std_by_par"] = par_dset.groupby('ID').apply(
-        lambda x: standardize_cols(x, free_mouse_feats)).reset_index(drop=True)
-
-#%%
-
-# plot the kde plots for all features
-for dset in free_mouse_datasets:
-    print(f"all features Kde plots for: {dset}")
-    multi_kde_plot(free_mouse_datasets[dset].loc[:, free_mouse_feats], dset)
-
-
-#%%
+    # add the dataset to the dataset list
+    free_mouse_datasets[thresh] = dset
 
 # There is no need to get basic desc stats about all datasets (which was done after the mouse task dataset creation,
 # because no cases were removed from the dataset)
 
-# directly plot a correlation heatmap for all datasets
+#%%
+
+# plot the kde plots for all datasets
+for dset in free_mouse_datasets:
+    print(f"KDE plots for: {dset}")
+    # get the remaining task features
+    remaining_features = [feat for feat in free_mouse_feats if feat in list(free_mouse_datasets[dset].columns)]
+    multi_kde_plot(free_mouse_datasets[dset].loc[:, remaining_features + ["valence", "arousal"]], dset)
+
+
+#%%
+
+# plot a correlation heatmap for all datasets
 for dset in free_mouse_datasets:
     print(f"Correlation Heatmap for: {dset}")
-    correlation_heatmap(free_mouse_datasets[dset].loc[:, free_mouse_feats + ["valence", "arousal"]],
-                        fig_size=(48,38), font_scale=3.8, name="all_" + dset, add_text=False)
+    remaining_features = [feat for feat in free_mouse_feats if feat in list(free_mouse_datasets[dset].columns)]
+    correlation_heatmap(free_mouse_datasets[dset].loc[:, control_vars + remaining_features + ["valence", "arousal"]],
+                        fig_size=(48, 38), font_scale=3.2, name=dset, add_text=True)
 
 #%%
 
-# get the redundant mouse usage features for each dataset
-redundant_free_mouse_feats = {}
+# inspect the relationship between the order and outcome and predictor variables more closely to get a descriptive
+# feeling for a potential habituation effect throughout the study
 
-for dset in free_mouse_datasets:
-    print(f"Remove collinear features for: {dset}")
-    redundant_features = find_corr_vars(free_mouse_datasets[dset].loc[:, free_mouse_feats], cutoff=0.8)
-    print(f"{len(redundant_features)} Redundant features:\n{redundant_features}\n")
-    # save them in the dictionary
-    redundant_free_mouse_feats[dset] = redundant_features
+# Do this using data visualization
 
-#%%
-
-# Print the Shape of the datasets without collinear features
-for dset in free_mouse_datasets:
-    print(f"Shape of Dataset: {dset} after corr removal\n"
-          f"{free_mouse_datasets[dset].drop(redundant_free_mouse_feats[dset], axis=1).shape}")
-
+# doing this for all variables in all datasets is a little bit much, therefore, do it for (randomly) selected variables
+# in a randomly selected dataset (of course, it is also possible to select a target and dataset manually)
+rand_free_dset_name, rand_free_dset = random.choice(list(free_mouse_datasets.items()))
+random_target = random.choice([feat for feat in free_mouse_feats if feat in rand_free_dset.columns] +
+                              ["valence", "arousal"])
 
 #%%
 
-# create a correlation heatmap for each dataset without the redundant features
-for dset in free_mouse_datasets:
-    print(f"Heatmap without collinear features for: {dset}")
-    correlation_heatmap(free_mouse_datasets[dset].loc[:, free_mouse_feats + ["valence", "arousal"]].drop(redundant_free_mouse_feats[dset], axis=1),
-                        fig_size=(48,38), font_scale=3.8, name="sel_" + dset, add_text=True)
+# use the three different visualization approaches to descriptively check out the relationship between order and the
+# target
+plot_habituation_single_pars(rand_free_dset, random_target, rand_free_dset_name)
 
 #%%
+plot_habituation_multi_pars(rand_free_dset, random_target, rand_free_dset_name)
 
-# create a kde plot to show the distribution of the selected features
-for dset in free_mouse_datasets:
-    print(f"Kde plots without collinear features for: {dset}")
-    multi_kde_plot(free_mouse_datasets[dset].loc[:, free_mouse_feats + ["valence", "arousal"]].drop(redundant_free_mouse_feats[dset], axis=1), dset)
+#%%
+plot_habituation_all_pars(rand_free_dset, random_target, rand_free_dset_name)
 
 
 #%%
 
-# create a pairplot for each dataset without the redundant features
+# In the KDE-Plots it was noticable that not all mouse usage features as well as the dependent variables did now always
+# follow a normal-distribution. One reviewer remarked that it might be better to transform the data before data analysis
+# to make it more norma-like. We therefore applied rank-based inverse normal transformation to the data before feeding
+# it into the mixed-level analysis. Here, use the transformation to check out how it changes the distribution (and
+# possibly correlations) of the features
+
+# loop the datasets to add the transformed features to each dataset
 for dset in free_mouse_datasets:
-    print(f"Pairplot without collinear features for: {dset}")
-    plot_pairplot(free_mouse_datasets[dset].loc[:, free_mouse_feats].drop(redundant_free_mouse_feats[dset], axis=1), dset)
+    print(f"Transforming Features for Dataset: {dset}")
+    # get the remaining features in the dataset
+    remaining_features = [feat for feat in free_mouse_feats if feat in list(free_mouse_datasets[dset].columns)]
+    # loop all remaining features and add the transformed features to the dataset
+    for feat in remaining_features + ["valence", "arousal"]:
+        free_mouse_datasets[dset][feat + "_trans"] = rank_inverse_normal_transform(free_mouse_datasets[dset][feat])
+
+#%%
+
+# create a kde plot for the transformed feature in each dataset
+for dset in free_mouse_datasets:
+    print(f"KDE plots after feature transformation: {dset}")
+    trans_features = [feat + "_trans" for feat in free_mouse_feats if feat in list(free_mouse_datasets[dset].columns)]
+    multi_kde_plot(free_mouse_datasets[dset].loc[:, trans_features + ["valence_trans", "arousal_trans"]], dset)
+
+#%%
+
+# create a correlation heatmap for the transformed features in each dataset
+for dset in free_mouse_datasets:
+    print(f"Heatmap after feature transformation: {dset}")
+    trans_features = [feat + "_trans" for feat in free_mouse_feats if
+                      feat in list(free_mouse_datasets[dset].columns)]
+    correlation_heatmap(free_mouse_datasets[dset].loc[:, control_vars + trans_features + ["valence_trans", "arousal_trans"]],
+                        fig_size=(48, 38), font_scale=3.2, name=dset, add_text=True)
 
 
 

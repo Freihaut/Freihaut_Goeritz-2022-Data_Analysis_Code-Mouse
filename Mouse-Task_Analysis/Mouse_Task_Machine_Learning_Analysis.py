@@ -36,10 +36,11 @@ rng = np.random.RandomState(0)
 # %%
 
 # import the dataset
-dataset = pd.read_csv("C:/Users/freih/Desktop/Datenauswertung_Paul/Mouse-Task_Analysis/Mouse_Task_Features.csv")
+dataset = pd.read_csv("Mouse-Task_Analysis/Mouse_Task_Features.csv")
 
 # transform the ID column from strings to labels
 dataset["ID"] = LabelEncoder().fit_transform(dataset["ID"])
+
 
 # %%
 
@@ -58,7 +59,7 @@ all_predictors = ['task_duration', 'clicks', 'task_total_dist', 'task_speed_mean
                   'trial_sd_y_flips']
 
 # list all covariates
-covariates = ['timestamp', 'zoom', 'screen_width', 'screen_height', 'median_sampling_freq']
+covariates = ['order', 'zoom', 'screen_width', 'screen_height', 'age', 'sex', 'hand']
 
 # list all targets
 all_targets = ["arousal", "valence"]
@@ -122,15 +123,14 @@ print(f"Number of participants in the test dataset: {len(test_df['ID'].unique())
 # 2. Establish a dataset preprocessing pipeline #
 #################################################
 # Before the Machine Learning Algorithm is trained with the data (and its performance it tested on the test dataset),
-# the dataset is preprocessed. This preprocessing includes multiple steps and for some steps, there are multiple
-# preprocessing options. Similar to the mouse data mixed model analysis, we apply multiple preprocessing routines
-# to the data to get multiple prediction results. This procedure also helps to get a sense for the robustness
-# (variability) of the prediction results and therefore about the potential validity of the results
+# the dataset is preprocessed. This preprocessing includes multiple steps. Similar to the mouse data mixed model analysis,
+# we apply multiple preprocessing routinesto the data to get multiple prediction results.
+# This procedure also helps to get a sense for the robustness (variability) of the prediction results and therefore
+# about the potential validity of the results
 
 # The preprocessing includes:
 # - Removing Outlier datasets (per mouse usage task)
 # - Linear Equation of the mouse usage features to account for potential differences between the  mouse usage tasks
-# - Standardization of the mouse usage features (and covariates)
 # - Removal of multicollinear mouse usage features
 
 # In order to prevent data leakage in the machine learning analysis, all preprocessing steps are done using the
@@ -331,22 +331,22 @@ dataset_pairs = {}
 
 # get the outlier removal options that will be looped
 outlier_options = [{"method": "cutoff", "thresh": None}, {"method": "iqr", "thresh": 2.5}, {"method": "iqr", "thresh": 3.5}]
-# get the standardization options
-standardization_options = ["by_sample", "by_participant"]
 
-# loop all option combinations (outlier options * standardization options)
-for opt in [(out_o, std_o) for out_o in outlier_options for std_o in standardization_options]:
+# loop the outlier removal options to create the different datasets
+for opt in outlier_options:
 
     # get the option combination
-    save_string = opt[1] + "_" + opt[0]["method"] + "_" + str(opt[0]["thresh"]) if opt[0]["method"] == "iqr" else opt[1] + "_" + opt[0]["method"]
+    save_string = opt["method"] + "_" + str(opt["thresh"]) if opt["method"] == "iqr" else opt["method"]
     print(f"Creating the train-test dataset pair for option combination: {save_string}")
 
     # Notes about the data preprocessing procedure for the mouse task:
     # The data transformation includes the following steps
     # - Removing Outlier datasets (per mouse usage task)
     # - Linear Equation of the mouse usage features to account for potential differences between the  mouse usage tasks
-    # - Standardization of the mouse usage features (and covariates)
     # - Removal of multicollinear mouse usage features
+
+    # Note that in the mixed-model analysis, we transformed the input features to be normal-like. Such a transformation
+    # should not be necessary for the random forest algorithms which will be used to train the data
 
     # There exist many other potential other transformation procedures. The existing procedure was choosen as a
     # compromise between testing out different options, but not being overwhelmed by too many options
@@ -367,17 +367,12 @@ for opt in [(out_o, std_o) for out_o in outlier_options for std_o in standardiza
     # transformations are applied correctly and decreases potential errors in the data preprocessing procedure
     dataset_transformation_pipeline = Pipeline([
         # Trans 1: Remove Outliers from the data with the specified removal options
-        ("remove_outlier", RemoveOutliers(method=opt[0]["method"], sel_cols=all_predictors, iqr_thresh=opt[0]["thresh"],
+        ("remove_outlier", RemoveOutliers(method=opt["method"], sel_cols=all_predictors, iqr_thresh=opt["thresh"],
                                  by="taskNum")),
         # Trans 2: Standardize (linear equate) by the mouse task (to account for potential differences in the predictors
         # between the different mouse tasks)
         ('equateTask', GroupByScaler(by="taskNum", sel_cols=all_predictors)),
-        # Trans 3: Standardize the Covariates (timestamp is standardized by participants, other covariates by sample)
-        ('std_timestamp', GroupByScaler(by="ID", sel_cols=["timestamp"])),
-        ('std_other_covariates', GroupByScaler(sel_cols=covariates[1:])),
-        # Trans 4: Standardize the input features (either by the entire sample & by the participant)
-        ('std_features', GroupByScaler(by="ID" if opt[1] == "by_participant" else None, sel_cols=all_predictors)),
-        # Trans 5: Remove collinear features (based on a correlation coefficient threshold of .8
+        # Trans 3: Remove collinear features (based on a correlation coefficient threshold of .8
         ('remove_multicoll', HandleMulticollinearity(method="corr", cols=all_predictors, cor_thresh=0.8))
     ])
 
@@ -411,7 +406,7 @@ def plot_feature_importance_scores(importance_results, col_names, f_name):
     rename_dict = {
         # control variables
         'timestamp': 'Timestamp', 'zoom': 'Zoom', 'screen_width': 'Screen Width',
-        'screen_height': 'Screen Height', 'median_sampling_freq': 'Med. Samp. Frequency',
+        'screen_height': 'Screen Height', 'order': 'Order', 'age': 'Age', 'sex': 'Sex', 'hand': 'Hand',
         # Mouse Task Features
         "clicks": 'Clicks',
         "task_total_dist": "Task: Tot. Distance",
@@ -458,11 +453,9 @@ def plot_feature_importance_scores(importance_results, col_names, f_name):
     plt.tight_layout()
 
     # save the figure
-    plt.savefig(f_name + "_feat_import.png")
+    # plt.savefig(f_name + "_feat_import.png")
 
     plt.show()
-
-    return
 
 
 # helper function for the machine learning regression analysis
@@ -501,7 +494,7 @@ def ml_regression(training_data, test_data, predictors, target):
     # setup a grid of hyperparameters that will be tuned in RandomizedSearchCV
     rf_hyperparameters = {
         'n_estimators': [100, 200, 300, 400, 500],
-        'max_features': ['auto', 'sqrt', "log2"],
+        'max_features': [1.0, 'sqrt', "log2"],
         'max_depth': [60, 70, 80, 90, 100, None],
         'min_samples_split': [2, 5, 10],
         'min_samples_leaf': [1, 2, 4],
@@ -525,7 +518,7 @@ def ml_regression(training_data, test_data, predictors, target):
     # a random state
     print("Running the Randomized Search Cross Validation")
     ml_model = RandomizedSearchCV(rf_regressor, rf_hyperparameters, cv=cv_splits, scoring=make_scorer(r2_score),
-                                  refit=True, n_jobs=4, random_state=rng)
+                                  refit=True, n_jobs=None, random_state=rng)
 
     # Evaluating the tuned model
     # --------------------------
@@ -559,7 +552,7 @@ def ml_regression(training_data, test_data, predictors, target):
     # see: https://scikit-learn.org/stable/modules/permutation_importance.html
     feature_importance_scores = permutation_importance(ml_model, x_test, y_test,
                                                        scoring=make_scorer(r2_score),
-                                                       n_jobs=4,
+                                                       n_jobs=None,
                                                        n_repeats=30,
                                                        random_state=rng)
 
@@ -592,34 +585,9 @@ playground_preds = [pred for pred in list(playground_dset["train"].columns) if p
 
 #%%
 
-# do some shennenigans
-
-
-# Function to do a cluster mean centering of a target variable (probably not the best solution and should be a class
-# in the preprocessor pipeline, but it works!
-def clusterMeanCenter(train_data, test_data, target):
-
-    # first, calculate the group mean in the cluster of the training dataset
-    train_data[target + "_clusterMean"] = train_data.groupby(["ID"])[target].transform('mean')
-    # cluster mean center the target variable
-    train_data[target + '_CMC'] = train_data[target] - train_data[target + "_clusterMean"]
-
-    # now add the cluster mean to the test dataset
-    test_data = test_data.merge(train_data.drop_duplicates(subset='ID', keep="last").loc[:, ["ID", target + "_clusterMean"]],
-                        on='ID', how='right')
-    # calculate the clustered mean center target variable in the test dataset
-    test_data[target + '_CMC'] = test_data[target] - test_data[target + "_clusterMean"]
-
-    # return the training and test dataset
-    return train_data, test_data
-
-
-#%%
-
-# run the machine learning model (regression for targets valence & arousal; classification for target stress)
+# run the machine learning model with the specifications of the playground data
 print(f"Run the machine learning analysis with dataset {playground_dset_name} and target: {playground_target}")
-playground_results = ml_regression(playground_dset["train"], playground_dset["test"], playground_preds,
-                                       'DVcentered')
+playground_results = ml_regression(playground_dset["train"], playground_dset["test"], playground_preds, playground_target)
 
 
 
@@ -655,10 +623,10 @@ ml_analysis_results = {}
 for target in all_targets:
     # loop all dataset pairs
     for dset in dataset_pairs:
-        # for each target-dataset combination, we calculate three models:
-        # 1. A "baseline model" that includes the participant ID and the covariates
-        # 2. A "full model" that includes the ID, the covariates and all mouse usage features
-        # 3. A "mouse-only" model that only includes the mouse usage features
+        # for each target-dataset combination, we calculate two models:
+        # 1. A "baseline model" that includes only the participant ID (this model is similar to the random intercept
+        #       only model in the mixed model analysis)
+        # 2. A "full model" that additionally includes all mouse-usage features
         # The baseline model is calculated to be able to get the "increment" in prediction performance by the
         # mouse usage features
 
@@ -666,12 +634,10 @@ for target in all_targets:
         ml_analysis_results[target + "_" + dset] = {}
 
         # get the predictors of the baseline model
-        baseline_preds = covariates + ["ID"]
+        baseline_preds = ["ID"]
         # get only the mouse usage predictors (not all are relevant because some got removed due to collinearity)
-        mouse_only_preds = [pred for pred in list(dataset_pairs[dset]['train'].columns)
+        mouse_preds = [pred for pred in list(dataset_pairs[dset]['train'].columns)
                                              if pred in all_predictors]
-        # add covariates and mouse predictors for the full model
-        full_model_preds = baseline_preds + mouse_only_preds
 
         print(f"Running the machine learning analysis for the BASELINE MODEL using dataset: {dset} and "
               f"target: {target}")
@@ -682,15 +648,15 @@ for target in all_targets:
         print(f"Running the machine learning analysis for the FULL MODEL using dataset: {dset} and "
               f"target: {target}")
         full_model_results = ml_regression(dataset_pairs[dset]["train"], dataset_pairs[dset]["test"],
-                                               full_model_preds, target)
+                                               baseline_preds + mouse_preds, target)
 
         # save the results + information about the train/test dataset shapes & the mouse usage predictors
         ml_analysis_results[target + "_" + dset]["baseline_results"] = baseline_results
         ml_analysis_results[target + "_" + dset]["full_model_results"] = full_model_results
         ml_analysis_results[target + "_" + dset]["dset_shapes"] = {"train_shape": dataset_pairs[dset]["train"].shape,
                                                                    "test_shape": dataset_pairs[dset]["test"].shape}
-        ml_analysis_results[target + "_" + dset]["predictors"] = {"baseline": covariates + ["ID"],
-                                                                  "mouse_only": mouse_only_preds}
+        ml_analysis_results[target + "_" + dset]["predictors"] = {"baseline": baseline_preds,
+                                                                  "mouse_only": baseline_preds + mouse_preds}
 
 #%%
 
@@ -751,3 +717,61 @@ for i in ml_analysis_results:
         break
 
 
+#%%
+
+# run additional test analysis to look at the effect of a potential inclusion of the control variables
+
+# To do so, randomly draw a dataset and target
+controls_test_dset_name, controls_test_dset = random.choice(list(dataset_pairs.items()))
+controls_test_target = random.choice(all_targets)
+# get the predictors for the randomly drawn dataset
+controls_test_mouse_features = [pred for pred in list(controls_test_dset["train"].columns) if pred in all_predictors]
+
+#%%
+
+# first, run a model that only includes the control variables (+ participant ID)
+controls_only_model = ml_regression(controls_test_dset["train"], controls_test_dset["test"],
+                                    ['ID'] + covariates, controls_test_target)
+
+#%%
+
+# second, run a model that additionally includes all mouse usage features
+controls_and_mouse_model = ml_regression(controls_test_dset["train"], controls_test_dset["test"],
+                                         ['ID'] + covariates + controls_test_mouse_features, controls_test_target)
+
+#%%
+
+# Run one more model with changes to the target variable (instead of the absolute level, use the change score of the
+# target from the mean of the participant)
+
+# Function to do a cluster mean centering of a target variable (function should probably be improved)
+def clusterMeanCenter(train_data, test_data, target):
+
+    # first, calculate the group mean in the cluster of the training dataset
+    train_data[target + "_clusterMean"] = train_data.groupby(["ID"])[target].transform('mean')
+    # cluster mean center the target variable
+    train_data[target + '_CMC'] = train_data[target + "_clusterMean"] - train_data[target]
+
+    # now add the cluster mean to the test dataset
+    test_data = test_data.merge(train_data.drop_duplicates(subset='ID', keep="last").loc[:, ["ID", target + "_clusterMean"]],
+                        on='ID', how='right')
+    # calculate the clustered mean center target variable in the test dataset
+    test_data[target + '_CMC'] = test_data[target] - test_data[target + "_clusterMean"]
+
+    # return the training and test dataset
+    return train_data, test_data
+
+# draw a random dataset again
+center_test_dset_name, center_test_dset = random.choice(list(dataset_pairs.items()))
+center_test_target = random.choice(all_targets)
+# get the predictors for the randomly drawn dataset
+center_test_mouse_features = [pred for pred in list(center_test_dset["train"].columns) if pred in all_predictors]
+
+# get the training and test dataset with cluster mean centered target
+center_test_train, center_test_test = clusterMeanCenter(center_test_dset["train"], center_test_dset["test"],
+                                                        center_test_target)
+
+#%%
+
+# run the machine learning model
+ml_regression(center_test_train, center_test_test, ['ID'] + center_test_mouse_features, center_test_target + "_CMC")

@@ -32,6 +32,10 @@ getwd()
 # set the working directory to the folder with the data
 setwd("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis")
 
+##############
+# Data Setup #
+##############
+
 # load the dataset
 mouseTaskData <- read.csv(file = 'Mouse_Task_Features.csv')
 
@@ -607,10 +611,18 @@ mouse_task_results <- list("Task_results_ri_coeffs" = dplyr::bind_rows(ri_coeff_
 save_model_results(mouse_task_results)
 
 # If already Calculated: Import the results from the CSV files instead of running the loop
-ri_results <- list(
-   "Task_results_ri_coeffs" = read.csv("Mouse_Task_Results/Mixed_Models/Random_Intercept/Task_results_ri_coeffs.csv"),
-  "Task_results_ri_diag" = read.csv("Mouse_Task_Results/Mixed_Models/Random_Intercept/Task_results_ri_diag.csv")
+mouse_task_results <- list(
+  "Task_results_ri_coeffs" = read.csv("Results_NEW/task_results_ri_coeffs.csv"),
+  "Task_results_ri_diag" = read.csv("Results_NEW/task_results_ri_diag.csv"),
+  "Task_results_fe_coeffs" = read.csv("Results_NEW/task_results_fe_coeffs.csv"),
+  "Task_results_fe_std_coeffs" = read.csv("Results_NEW/task_results_fe_std_coeffs.csv"),
+  "Task_results_fe_diag" = read.csv("Results_NEW/task_results_fe_diag.csv"),
+  "Task_results_rs_coeffs" = read.csv("Results_NEW/task_results_rs_coeffs.csv"),
+  "Task_results_rs_std_coeffs" = read.csv("Results_NEW/task_results_rs_std_coeffs.csv"),
+  "Task_results_rs_diag" = read.csv("Results_NEW/task_results_rs_diag.csv"),
+  "Task_results_model_comparison" = read.csv("Results_NEW/task_results_model_comparison.csv")
 )
+
 
 #################
 ### Test Loop ###
@@ -673,6 +685,12 @@ compare_with_test <- mouse_task_results[["Task_results_fe_coeffs"]] %>%
 write.csv(test_results, "Orig_Pred.csv", row.names=FALSE)
 write.csv(compare_with_test, "Within_Between_Pred.csv", row.names=FALSE)
 
+# do the same thing for the standardized coefficients
+
+test_std_results <- test_results_std %>% 
+  dplyr::filter(., !grepl("Intercept", Parameter)) %>%
+  dplyr::select(Std_Coefficient, Parameter)
+
 
 compare_with_test_std <- mouse_task_results[["Task_results_fe_std_coeffs"]] %>%
   dplyr::filter(., grepl("within|between", Parameter)) %>%
@@ -681,9 +699,56 @@ compare_with_test_std <- mouse_task_results[["Task_results_fe_std_coeffs"]] %>%
   dplyr::select(Std_Coefficient, Parameter)
 
 
+write.csv(test_results, "Orig_STD_Pred.csv", row.names=FALSE)
+write.csv(compare_with_test_std, "Within_Between_STD_Pred.csv", row.names=FALSE)
+
+
 #############################
 ### Visualize the Results ###
 #############################
+
+
+# Implement at the top to give the dataset nicer variable names?
+
+test <- single_pred_results[["Task_results_sp_re_coeffs"]] %>%
+  # filter the relevant dv data
+  filter(dv == 'arousal') %>%
+  # filter out all effects that are not plotted
+  filter(.data = ., !grepl('(Intercept)|sd_(Intercept)|sd__Observation', term)) %>%
+  # remove the sd__ string from the random effect coefficient names
+  mutate(term = str_replace(term, 'sd__', '')) %>%
+  # rename the term values to better variable name values (tideous work which probably should have done in an earlier step
+  mutate(term = recode(term, "clicks" = 'Clicks',
+                       "task_total_dist" = "Task: Tot. Distance",
+                       "task_angle_sd" = 'Task: Angle (sd)',
+                       "task_x_flips" = 'Task: X-Flips',
+                       "task_y_flips" = 'Task: Y-Flips',
+                       "trial_sd_duration" = 'Trial (sd): Duration',
+                       "trial_mean_trial_move_offset" = 'Trial (mean): Initiation Time',
+                       "trial_sd_trial_move_offset" = 'Trial (sd): Initiation Time',
+                       "trial_sd_total_dist" = 'Trial (sd): Tot. Distance',
+                       "trial_sd_distance_overshoot" = 'Trial (sd): Ideal Line Deviation',
+                       "trial_mean_speed_mean" = 'Trial (mean): Speed (mean)',
+                       "trial_sd_speed_mean" = 'Trial (sd): Speed (mean)',
+                       "trial_mean_speed_sd" = 'Trial (mean): Speed (sd)',
+                       "trial_sd_speed_sd" = 'Trial (sd): Speed (sd)',
+                       "trial_sd_abs_jerk_sd" = 'Trial (sd): Jerk (sd)',
+                       "trial_mean_angle_mean" = 'Trial (mean): Angle (mean)',
+                       "trial_sd_angle_mean" = 'Trial (sd): Angle (mean)',
+                       "trial_mean_angle_sd" = 'Trial (mean): Angle (sd)',
+                       "trial_sd_angle_sd" = 'Trial (sd): Angle (sd)',
+                       "trial_sd_x_flips" = 'Trial (sd): X-Flips',
+                       "trial_sd_y_flips" = 'Trial (sd): Y-Flips',
+                       "trial_mean_duration" = 'Trial (mean): Duration',
+                       "trial_mean_total_dist" = 'Trial (mean): Tot. Distance',
+                       "trial_sd_abs_jerk_mean" = 'Trial (sd): Jerk (mean)',
+                       "task_duration" = 'Task: Duration',
+                       "task_abs_jerk_sd" = 'Task: Jerk (sd)',
+                       "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)')) %>%
+  group_split(effect)
+
+
+# TODO: HOW TO CREATE THE PLOTS WITH DOUBLE THE VARIABLES? (ONLY WITHIN?)
 
 # A side-by-side plot of the fixed effect coefficients with their confidence intervals per predictor per dataset
 # for the random intercept model and the random intercept + random slope model plus the standard deviation of the
@@ -760,45 +825,8 @@ plot_coefficient_estimates <- function (fe_coeff_data, re_coeff_data, title, dot
 
 }
 
-test <- single_pred_results[["Task_results_sp_re_coeffs"]] %>%
-    # filter the relevant dv data
-    filter(dv == 'arousal') %>%
-    # filter out all effects that are not plotted
-    filter(.data = ., !grepl('(Intercept)|timestamp|zoom|screen_width|screen_height|median_sampling_freq|sd_(Intercept)|sd__Observation', term)) %>%
-      # remove the sd__ string from the random effect coefficient names
-      mutate(term = str_replace(term, 'sd__', '')) %>%
-      # rename the term values to better variable name values (tideous work which probably should have done in an earlier step
-     mutate(term = recode(term, "clicks" = 'Clicks',
-                         "task_total_dist" = "Task: Tot. Distance",
-                         "task_angle_sd" = 'Task: Angle (sd)',
-                         "task_x_flips" = 'Task: X-Flips',
-                         "task_y_flips" = 'Task: Y-Flips',
-                         "trial_sd_duration" = 'Trial (sd): Duration',
-                         "trial_mean_trial_move_offset" = 'Trial (mean): Initiation Time',
-                         "trial_sd_trial_move_offset" = 'Trial (sd): Initiation Time',
-                         "trial_sd_total_dist" = 'Trial (sd): Tot. Distance',
-                         "trial_sd_distance_overshoot" = 'Trial (sd): Ideal Line Deviation',
-                         "trial_mean_speed_mean" = 'Trial (mean): Speed (mean)',
-                         "trial_sd_speed_mean" = 'Trial (sd): Speed (mean)',
-                         "trial_mean_speed_sd" = 'Trial (mean): Speed (sd)',
-                         "trial_sd_speed_sd" = 'Trial (sd): Speed (sd)',
-                         "trial_sd_abs_jerk_sd" = 'Trial (sd): Jerk (sd)',
-                         "trial_mean_angle_mean" = 'Trial (mean): Angle (mean)',
-                         "trial_sd_angle_mean" = 'Trial (sd): Angle (mean)',
-                         "trial_mean_angle_sd" = 'Trial (mean): Angle (sd)',
-                         "trial_sd_angle_sd" = 'Trial (sd): Angle (sd)',
-                         "trial_sd_x_flips" = 'Trial (sd): X-Flips',
-                         "trial_sd_y_flips" = 'Trial (sd): Y-Flips',
-                         "trial_mean_duration" = 'Trial (mean): Duration',
-                         "trial_mean_total_dist" = 'Trial (mean): Tot. Distance',
-                         "trial_sd_abs_jerk_mean" = 'Trial (sd): Jerk (mean)',
-                         "task_duration" = 'Task: Duration',
-                         "task_abs_jerk_sd" = 'Task: Jerk (sd)',
-                         "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)')) %>%
-  group_split(effect)
 
-
-# Save a plot for every dependent variable of the single predictor model results visualization
+# Save a plot for every dependent variable
 for (target in dvs) {
   # get the (cleaned) coefficient data for the random intercept only model
   fe_coeffs <- single_pred_results[["Task_results_sp_fe_coeffs"]] %>%
@@ -879,11 +907,62 @@ for (target in dvs) {
 }
 
 
-###############################################################################
-######## Additional Analysis to look at covariates ############################
-###############################################################################
+############################################
+### Additional Control Variable Analysis ###
+############################################
 
+# get a random dataset, the predictor and the target
+control_data <- get_sample_data()
+control_dset <- control_data[["dset"]][[1]]
+control_pred <- control_data[["pred"]]
+control_target <- control_data[["target"]]
 
-# list the covariates that will be included in the mixed models
-covariates <- c('hand', 'sex' 'age','timestamp', 'zoom', 'screen_width', 
+# create an order variable for each participant from the timestamp variable
+control_dset <- control_dset %>%
+  group_by(ID) %>%
+  arrange(., timestamp) %>%
+  mutate(., order = 1:n()) %>%
+  ungroup()
+
+# list the control variables
+control_variables <- c('hand', 'sex', 'age', 'order', 'zoom', 'screen_width', 
                 'screen_height', 'median_sampling_freq')
+
+# run a model only with the control variables
+control_model <- fit_mixed_model(dataset = control_dset,
+                                model_formular = paste(control_target, '~', paste(control_variables, collapse = "+"), '+ (1|ID)'),
+                                mod_name = paste0("Control Only Model"),
+                                plot_diag = F)
+
+# run a model with the predictor and all control variables
+control_pred_model <- fit_mixed_model(dataset = control_dset,
+                                      model_formular = paste(control_target, '~', paste(control_variables, collapse = "+"), '+', control_pred, '+ (1|ID)'),
+                                      mod_name = paste0("Control and Predictor Model"),
+                                      plot_diag = F)
+
+performance::test_performance(control_model[["mod"]], control_pred_model[["mod"]])
+
+# run an interaction model with sex and mouse usage
+sex_interaction <- fit_mixed_model(dataset = control_dset,
+                                   model_formular = paste(control_target, '~ sex *', control_pred, '+ (1|ID)'),
+                                   mod_name = paste0("Sex Interaction Model"),
+                                   plot_diag = F)
+
+sex_interaction[["coeffs"]]
+
+# run a model with mouse usage as the target and order as a predictor to check
+# for a time effect on mouse usage
+order_effect <- fit_mixed_model(dataset = control_dset,
+                                model_formular = paste(control_pred, '~ order + (1|ID)'),
+                                mod_name = paste0("Order Effect Model"),
+                                plot_diag = F)
+
+order_effect[["coeffs"]]
+
+# run a model to check for an order * mouse usage interaction
+order_interaction <- fit_mixed_model(dataset = control_dset,
+                                     model_formular = paste(control_target, '~ order *', control_pred, '+ (1|ID)'),
+                                     mod_name = paste0("Order Interaction Model"),
+                                     plot_diag = F)
+
+order_interaction[["coeffs"]]
