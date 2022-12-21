@@ -69,12 +69,9 @@ name_change_dict = {
     "mo_ep_mean_y_flips": 'Move Ep. (mean): Y-Flips',
     "lockscreen_episodes.": 'Num. of Lockscreen Eps.',
     # task datasets
-    'by_sample_cutoffNA': 'dur. cutoff & std. by sample',
-    'by_sample_iqr_out2.5': 'IQR 2.5 & std. by sample',
-    'by_sample_iqr_out3.5': 'IQR 3.5 & std. by sample',
-    'by_participant_cutoffNA': 'dur. cutoff & std. by par',
-    'by_participant_iqr_out2.5': 'IQR 2.5 & std. by par',
-    'by_participant_iqr_out3.5': 'IQR 3.5 & std. by par',
+    'cutoff_0': 'dur. cutoff',
+    'iqr_out_2.5': 'IQR 2.5',
+    'iqr_out_3.5': 'IQR 3.5',
     # for ml results
     'by_sample_cutoff': 'dur. cutoff & std. by sample',
     'by_sample_iqr_2.5': 'IQR 2.5 & std. by sample',
@@ -83,12 +80,9 @@ name_change_dict = {
     'by_participant_iqr_2.5': 'IQR 2.5 & std. by par',
     'by_participant_iqr_3.5': 'IQR 3.5 & std. by par',
     # free mouse datasets
-    'p_thresh_1000_by_sample': '1s pause & std. by sample',
-    'p_thresh_2000_by_sample': '2s pause & std. by sample',
-    'p_thresh_3000_by_sample': '3s pause & std. by sample',
-    'p_thresh_1000_by_participant': '1s pause & std. by par',
-    'p_thresh_2000_by_participant': '2s pause & std. by par',
-    'p_thresh_3000_by_participant': '3s pause & std. by par',
+    '1000': '1s pause thresh',
+    '2000': '2s pause thresh',
+    '3000': '3s pause thresh',
     # for ml results
     '1000_by_sample': '1s pause & std. by sample',
     '2000_by_sample': '2s pause & std. by sample',
@@ -107,10 +101,10 @@ name_change_dict = {
 
 # create a new dataframe with the following structure
 
-#                          Baseline Model       |          Random Intercept Model
-#                   --------------------------- | ------------------------------------
-#                   | AIC | R²-cond | R²-marg   | AIC | R²-cond | R²-marg | Coeff [CI]
-# -------------------------------------------------------------------------------------
+#                                  Fixed Effect Model              |          Random Slope Model
+#                   ---------------------------------------------- | ------------------------------------
+#                   | -2DeltaLL | R²-cond | R²-marg | Coeff [CI]   | 2DeltaLL | R²-cond | R²-marg | Coeff [CI]
+# --------------------------------------------------------------------------------------------------------------
 #           | Dset1 |
 # Predictor | Dset2 |
 #           | Dset3 |
@@ -122,9 +116,9 @@ name_change_dict = {
 # for the null models and baseline models
 # inputs are the baseline task files as well as the random intercept only (null model) task files (only the diag files
 # are needed, not the coefficient files)
-def create_null_baseline_table(null_df, baseline_df):
+def create_null_model_table(null_df):
     # results dict
-    null_baseline_table = {}
+    null_table = {}
 
     # get the AIC; R2_conditional, R2_marginal and ICC from the null model and the baseline model
 
@@ -135,50 +129,36 @@ def create_null_baseline_table(null_df, baseline_df):
     for target in targets:
         for dset in dsets:
 
-            null_baseline_table[(target, name_change_dict[dset])] = {}
+            null_table[(target, name_change_dict[dset])] = {}
 
             # get the target, dset subset from the dataframes
             null_diag = null_df.loc[(null_df["dv"] == target) & (null_df["dframe"] == dset)]
-            baseline_diag = baseline_df.loc[(baseline_df["dv"] == target) & (baseline_df["dframe"] == dset)]
 
-            # get the AIC, R2_conditionaö. R_2 marginal and ICC values for the null model and baseline model
-            # null model
-            null_baseline_table[(target, name_change_dict[dset])][("Null Model", "AIC")] = null_diag["AIC"].values[0]
-            null_baseline_table[(target, name_change_dict[dset])][("Null Model", "R²-cond")] = \
-            null_diag["R2_conditional"].values[0]
-            null_baseline_table[(target, name_change_dict[dset])][("Null Model", "R²-marg")] = \
-            null_diag["R2_marginal"].values[0]
-            null_baseline_table[(target, name_change_dict[dset])][("Null Model", "ICC")] = null_diag["ICC"].values[0]
+            # get the AIC, ICC, R2_conditional, R_2 marginal, R_2 cumulative for the null model
+            null_table[(target, name_change_dict[dset])][("Null Model", "AIC")] = null_diag["AIC"].values[0]
+            null_table[(target, name_change_dict[dset])][("Null Model", "ICC")] = null_diag["ICC"].values[0]
+            null_table[(target, name_change_dict[dset])][("Null Model", "R²-cond")] = null_diag["R2_conditional"].values[0]
+            null_table[(target, name_change_dict[dset])][("Null Model", "R²-marg")] = null_diag["R2_marginal"].values[0]
+            null_table[(target, name_change_dict[dset])][("Null Model", "R²-cum")] = null_diag["pseudo_R2"].values[0]
 
-            # baseline model
-            null_baseline_table[(target, name_change_dict[dset])][("Baseline Model", "AIC")] = \
-            baseline_diag["AIC"].values[0]
-            null_baseline_table[(target, name_change_dict[dset])][("Baseline Model", "R²-cond")] = \
-            baseline_diag["R2_conditional"].values[0]
-            null_baseline_table[(target, name_change_dict[dset])][("Baseline Model", "R²-marg")] = \
-            baseline_diag["R2_marginal"].values[0]
-            null_baseline_table[(target, name_change_dict[dset])][("Baseline Model", "ICC")] = \
-            baseline_diag["ICC"].values[0]
+    return null_table
 
 
-    return null_baseline_table
-
-
-# for the single predictor results
-# inputs are the five datasets for the random intercept model coefficient estimations, the random intercept model model
-# diagnostics, the random slope model coefficient estimations, the random slope model model diagnostics
-def create_single_pred_result_table(ri_coeffs_df, ri_diag_df, rs_coeffs_df, rs_diag_df):
+# helper to create a table for the model diagnostics of the predictor models
+# inputs are the datasets of the fixed effect model diagnostics, the random slope model model diagnostics,
+# and the model comparisons table
+def create_pred_diag_table(fe_diag_df, rs_diag_df, comparison_df):
     # results table dict
-    single_pred_table = {}
+    pred_diag_table = {}
 
     # loop every predictor for every data set and every dependent variable, isolate the desired results and save them
-    sp_targets = ri_diag_df["dv"].unique()
-    sp_dsets = ri_diag_df["dframe"].unique()
-    sp_preds = ri_diag_df["iv"].unique()
+    sp_targets = fe_diag_df["dv"].unique()
+    sp_dsets = fe_diag_df["dframe"].unique()
+    sp_preds = fe_diag_df["iv"].unique()
 
     # Loop all combinations to fill the single pred_table in order to create the results dataframe
     for target in sp_targets:
-        single_pred_table[target] = {}
+        pred_diag_table[target] = {}
         for pred in sp_preds:
             for dset in sp_dsets:
                 # extract the relevant info from the result tables and save them in the dictionary
@@ -186,179 +166,245 @@ def create_single_pred_result_table(ri_coeffs_df, ri_diag_df, rs_coeffs_df, rs_d
                 # first check if the target, pred, dset combination exists
                 # to do so, extract the combination from the random intercept model and get the length (should be
                 # greater than 0)
-                ri_diag = ri_diag_df.loc[(ri_diag_df["dv"] == target) &
-                                             (ri_diag_df["iv"] == pred) &
-                                             (ri_diag_df["dframe"] == dset)]
+                ri_diag = fe_diag_df.loc[(fe_diag_df["dv"] == target) &
+                                         (fe_diag_df["iv"] == pred) &
+                                         (fe_diag_df["dframe"] == dset)]
 
                 if len(ri_diag) > 0:
                     pred_name = name_change_dict[pred]
                     dset_name = name_change_dict[dset]
-                    single_pred_table[target][(pred_name, dset_name)] = {}
+                    pred_diag_table[target][(pred_name, dset_name)] = {}
 
-                    # Random Intercept Model Diagnostics (AIC, R²-cond, R²-marg, ICC)
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept Model', 'AIC')] = \
+                    # get the relevant model comparison data to grab the results of the log likelihood ratio test
+                    likelihoodratio_data = comparison_df.loc[(comparison_df["dv"] == target) &
+                                                             (comparison_df["iv"] == pred) &
+                                                             (comparison_df["dframe"] == dset)].reset_index()
+
+                    # Fixed Effect Model Diagnostics (-2ΔLL, AIC, R²-cond, R²-marg, R²-cum)
+                    pred_diag_table[target][(pred_name, dset_name)][('Fixed Effect Model', u'-2ΔLL')] = \
+                        likelihoodratio_data.at[1, 'p']
+                    pred_diag_table[target][(pred_name, dset_name)][('Fixed Effect Model', 'AIC')] = \
                         ri_diag['AIC'].values[0]
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept Model', 'R²-cond')] = \
+                    pred_diag_table[target][(pred_name, dset_name)][('Fixed Effect Model', 'R²-cond')] = \
                         ri_diag['R2_conditional'].values[0]
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept Model', 'R²-marg')] = \
+                    pred_diag_table[target][(pred_name, dset_name)][('Fixed Effect Model', 'R²-marg')] = \
                         ri_diag['R2_marginal'].values[0]
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept Model', 'ICC')] = \
-                        ri_diag['ICC'].values[0]
+                    pred_diag_table[target][(pred_name, dset_name)][('Fixed Effect Model', 'R²-cum')] = \
+                        ri_diag['pseudo_R2'].values[0]
 
-                    # Random Intercept Model Coeffs
-                    ri_coeffs = ri_coeffs_df.loc[(ri_coeffs_df["dv"] == target) &
-                                                 (ri_coeffs_df["iv"] == pred) &
-                                                 (ri_coeffs_df["dframe"] == dset) &
-                                                 (ri_coeffs_df["term"] == pred)]
-
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept Model', 'Fixed Effect Est.')] = str(
-                        np.round(ri_coeffs["estimate"].values[0], 2)) + "\n[" \
-                                                                           + str(
-                        np.round(ri_coeffs["conf.low"].values[0], 2)) + ", " + str(
-                        np.round(ri_coeffs["conf.high"].values[0], 2)) + "]"
-                    # single_pred_table[target][(pred, dset)]["RI_FE_Conf.low"] = ri_coeffs["conf.low"].values[0]
-                    # single_pred_table[target][(pred, dset)]["RI_FE_Conf.high"] = ri_coeffs["conf.high"].values[0]
-
-                    # Random Slope Model Diagnostics (AIC, R²-cond, R²-marg, ICC)
+                    # Random Slope Model Diagnostics (-2ΔLL, AIC, R²-cond, R²-marg, R²-cum)
                     rs_diag = rs_diag_df.loc[(rs_diag_df["dv"] == target) &
                                              (rs_diag_df["iv"] == pred) &
                                              (rs_diag_df["dframe"] == dset)]
 
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept & Slope Model', 'AIC')] = \
+                    pred_diag_table[target][(pred_name, dset_name)][('Rand. Slope Model', u'-2ΔLL')] = \
+                        likelihoodratio_data.at[2, 'p']
+                    pred_diag_table[target][(pred_name, dset_name)][('Rand. Slope Model', 'AIC')] = \
                         rs_diag['AIC'].values[0]
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept & Slope Model', 'R²-cond')] = \
+                    pred_diag_table[target][(pred_name, dset_name)][('Rand. Slope Model', 'R²-cond')] = \
                         rs_diag['R2_conditional'].values[0]
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept & Slope Model', 'R²-marg')] = \
+                    pred_diag_table[target][(pred_name, dset_name)][('Rand. Slope Model', 'R²-marg')] = \
                         rs_diag['R2_marginal'].values[0]
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept & Slope Model', 'ICC')] = \
-                        rs_diag['ICC'].values[0]
+                    pred_diag_table[target][(pred_name, dset_name)][('Rand. Slope Model', 'R²-cum')] = \
+                        rs_diag['pseudo_R2'].values[0]
 
-                    # Random Slope Model Coeff
-
-                    # fixed term
-                    rs_coeffs = rs_coeffs_df.loc[(rs_coeffs_df["dv"] == target) &
-                                                 (rs_coeffs_df["iv"] == pred) &
-                                                 (rs_coeffs_df["dframe"] == dset) &
-                                                 (rs_coeffs_df["term"] == pred)]
-
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept & Slope Model', 'Fixed Effect Est.')] = str(
-                        np.round(rs_coeffs["estimate"].values[0], 2)) + "\n[" \
-                                                                           + str(
-                        np.round(rs_coeffs["conf.low"].values[0], 2)) + ", " + str(
-                        np.round(rs_coeffs["conf.high"].values[0], 2)) + "]"
-                    # single_pred_table[target][(pred, dset)]["RS_FE_Conf.low"] = rs_coeffs["conf.low"].values[0]
-                    # single_pred_table[target][(pred, dset)]["RS_FE_Conf.high"] = rs_coeffs["conf.high"].values[0]
-
-                    # random term
-                    rs_rand_coeff = rs_coeffs_df.loc[(rs_coeffs_df["dv"] == target) &
-                                                     (rs_coeffs_df["iv"] == pred) &
-                                                     (rs_coeffs_df["dframe"] == dset) &
-                                                     (rs_coeffs_df["term"] == 'sd__' + pred)]
-
-                    single_pred_table[target][(pred_name, dset_name)][('Rand. Intercept & Slope Model', 'Rand. Effect Est.')] = rs_rand_coeff["estimate"].values[0]
-
-    return single_pred_table
+    return pred_diag_table
 
 
-# for the interaction effect results
-# inputs are the five datasets for the random intercept model coefficient estimations, the random intercept model model
-# diagnostics, the random slope model coefficient estimations, the random slope model model diagnostics
-def create_interaction_results_table(ri_coeffs_df, ri_diag_df, rs_coeffs_df, rs_diag_df):
-    # setup a dictionary to store the grabbed results in order to convert it to the results table
-    ie_table = {}
+# helper to create a table for the effect coefficients of the predictor models
+# inputs are the datasets of the fixed effect model coefficients, the standardized fixed effect model coefficients
+# the random slope model coefficients, and the standardized random slope model coefficients
+def create_pred_coefficients_table(fe_coefficient_df, fe_std_coefficient_df, rs_coefficient_df, rs_std_coefficient_df):
 
-    # get all interaction combinations that will be looped
-    ie_targets = ri_diag_df["dv"].unique()
-    ie_dsets = ri_diag_df["dframe"].unique()
-    ie_combs = ri_diag_df.loc[:, ["iv1", "iv2"]].drop_duplicates().values
+    # results table dict
+    pred_coeff_table = {}
+
+    # loop every predictor for every data set and every dependent variable, isolate the desired results and save them
+    targets = fe_coefficient_df["dv"].unique()
+    dsets = fe_coefficient_df["dframe"].unique()
+    preds = fe_coefficient_df["iv"].unique()
 
     # Loop all combinations to fill the single pred_table in order to create the results dataframe
-    for target in ie_targets:
-        ie_table[target] = {}
-        for int_pair in ie_combs:
-            for dset in ie_dsets:
+    for target in targets:
+        pred_coeff_table[target] = {}
+        for pred in preds:
+            for dset in dsets:
+
                 # extract the relevant info from the result tables and save them in the dictionary
 
                 # first check if the target, pred, dset combination exists
                 # to do so, extract the combination from the random intercept model and get the length (should be
                 # greater than 0)
-                # Random Intercept Model R²-scores
-                ri_diag = ri_diag_df.loc[(ri_diag_df["dv"] == target) &
-                                         (ri_diag_df["iv1"] == int_pair[0]) &
-                                         (ri_diag_df["iv2"] == int_pair[1]) &
-                                         (ri_diag_df["dframe"] == dset)]
+                fe_coeffs = fe_coefficient_df.loc[(fe_coefficient_df["dv"] == target) &
+                                                  (fe_coefficient_df["iv"] == pred) &
+                                                  (fe_coefficient_df["dframe"] == dset)]
 
-                if len(ri_diag) > 0:
-                    ie_name = name_change_dict[int_pair[0]] + "\nX\n" + name_change_dict[int_pair[1]]
+                if len(fe_coeffs) > 0:
+                    pred_name = name_change_dict[pred]
                     dset_name = name_change_dict[dset]
-                    ie_table[target][(ie_name, dset_name)] = {}
 
-                    # Random Intercept Model Diagnostics (AIC, R²-cond, R²-marg, ICC)
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept Model', 'AIC')] = \
-                        ri_diag['AIC'].values[0]
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept Model', 'R²-cond')] = \
-                        ri_diag['R2_conditional'].values[0]
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept Model', 'R²-marg')] = \
-                        ri_diag['R2_marginal'].values[0]
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept Model', 'ICC')] = \
-                        ri_diag['ICC'].values[0]
+                    # get the standardized fixed effect coefficients for the predictor + dataset combination
+                    fe_std_coeffs = fe_std_coefficient_df.loc[(fe_std_coefficient_df["dv"] == target) &
+                                                                     (fe_std_coefficient_df["iv"] == pred) &
+                                                                     (fe_std_coefficient_df["dframe"] == dset)]
 
-                    # Random Intercept Model Coeffs
-                    ri_coeffs = ri_coeffs_df.loc[(ri_coeffs_df["dv"] == target) &
-                                                 (ri_coeffs_df["iv1"] == int_pair[0]) &
-                                                 (ri_coeffs_df["iv2"] == int_pair[1]) &
-                                                 (ri_coeffs_df["dframe"] == dset) &
-                                                 (ri_coeffs_df["term"] == int_pair[0] + ":" + int_pair[1])]
+                    # get the random slope coefficients for the predictor + dataset combination
+                    rs_coeffs = rs_coefficient_df.loc[(rs_coefficient_df["dv"] == target) &
+                                                      (rs_coefficient_df["iv"] == pred) &
+                                                      (rs_coefficient_df["dframe"] == dset)]
 
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept Model', 'Fixed Effect Est.')] = \
-                        str(np.round(ri_coeffs["estimate"].values[0], 2)) + "\n[" \
-                        + str(np.round(ri_coeffs["conf.low"].values[0], 2)) + ", " + str(
-                            np.round(ri_coeffs["conf.high"].values[0], 2)) + "]"
-                    # ie_table[target][(int_pair[0] + "*" + int_pair[1], dset)]["RI_FE_Conf.low"] = ri_coeffs["conf.low"].values[0]
-                    # ie_table[target][(int_pair[0] + "*" + int_pair[1], dset)]["RI_FE_Conf.high"] = ri_coeffs["conf.high"].values[0]
+                    # get the standardized random slope coefficients for the predictor + dataset combination
+                    rs_std_coeffs = rs_std_coefficient_df.loc[(rs_std_coefficient_df["dv"] == target) &
+                                                              (rs_std_coefficient_df["iv"] == pred) &
+                                                              (rs_std_coefficient_df["dframe"] == dset)]
 
-                    # Random Slope Model R²-scores
-                    rs_diag = rs_diag_df.loc[(rs_diag_df["dv"] == target) &
-                                             (rs_diag_df["iv1"] == int_pair[0]) &
-                                             (rs_diag_df["iv2"] == int_pair[1]) &
-                                             (rs_diag_df["dframe"] == dset)]
+                    # -- First, get all within-predictor information -- #
 
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept & Slope Model', 'AIC')] = \
-                        rs_diag['AIC'].values[0]
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept & Slope Model', 'R²-cond')] = \
-                        rs_diag['R2_conditional'].values[0]
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept & Slope Model', 'R²-marg')] = \
-                        rs_diag['R2_marginal'].values[0]
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept & Slope Model', 'ICC')] = \
-                        rs_diag['ICC'].values[0]
+                    # first, extract the within predictor coefficients
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")] = {}
 
-                    # Random Slope Model Coeff
+                    # Fixed Effect Model
 
-                    # fixed term
-                    rs_coeffs = rs_coeffs_df.loc[(rs_coeffs_df["dv"] == target) &
-                                                 (rs_coeffs_df["iv1"] == int_pair[0]) &
-                                                 (rs_coeffs_df["iv2"] == int_pair[1]) &
-                                                 (rs_coeffs_df["dframe"] == dset) &
-                                                 (rs_coeffs_df["term"] == int_pair[0] + ":" + int_pair[1])]
+                    # get the estimator row
+                    fe_within_coeffs = fe_coeffs.loc[fe_coeffs["term"] == pred + "_within"]
 
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept & Slope Model', 'Fixed Effect Est.')] = \
-                        str(np.round(rs_coeffs["estimate"].values[0], 2)) + "\n[" \
-                        + str(np.round(rs_coeffs["conf.low"].values[0], 2)) + ", " + str(
-                            np.round(rs_coeffs["conf.high"].values[0], 2)) + "]"
-                    # ie_table[target][(int_pair[0] + "*" + int_pair[1], dset)]["RS_FE_Conf.low"] = rs_coeffs["conf.low"].values[0]
-                    # ie_table[target][(int_pair[0] + "*" + int_pair[1], dset)]["RS_FE_Conf.high"] = rs_coeffs["conf.high"].values[0]
+                    # extract the Coefficient and Confidence Interval Estimate
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")][
+                        ('Fixed Effect Model', 'Fixed Effect Est.')] = str(
+                        np.round(fe_within_coeffs["estimate"].values[0], 2)) + "\n[" \
+                                                                          + str(
+                        np.round(fe_within_coeffs["conf.low"].values[0], 2)) + ", " + str(
+                        np.round(fe_within_coeffs["conf.high"].values[0], 2)) + "]"
 
-                    # random term
-                    rs_rand_coeff = rs_coeffs_df.loc[(rs_coeffs_df["dv"] == target) &
-                                                     (rs_coeffs_df["iv1"] == int_pair[0]) &
-                                                     (rs_coeffs_df["iv2"] == int_pair[1]) &
-                                                     (rs_coeffs_df["dframe"] == dset) &
-                                                     (rs_coeffs_df["term"] == 'sd__' + int_pair[0] + ":" + int_pair[1])]
+                    # get the p-value
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")][
+                        ('Fixed Effect Model', 'p-value')] = fe_within_coeffs["p.value"].values[0]
 
-                    ie_table[target][(ie_name, dset_name)][('Rand. Intercept & Slope Model', 'Rand. Effect Est.')] = \
-                        rs_rand_coeff["estimate"].values[0]
+                    # Standardized Fixed Effect Model
+                    fe_within_std_coeffs = fe_std_coeffs.loc[(fe_std_coefficient_df["Component"] == "within")]
 
-    return ie_table
+                    # extract the coefficient and the confidence interval
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")][
+                        ('Fixed Effect Model', 'Std. Fixed Effect Est.')] = str(
+                        np.round(fe_within_std_coeffs["Std_Coefficient"].values[0], 2)) + "\n[" \
+                                                                       + str(
+                        np.round(fe_within_std_coeffs["CI_low"].values[0], 2)) + ", " + str(
+                        np.round(fe_within_std_coeffs["CI_high"].values[0], 2)) + "]"
+
+                    # Random Slope Model
+                    rs_within_coeffs = rs_coeffs.loc[rs_coeffs["term"] == pred + "_within"]
+
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")][
+                        ('Rand. Slope Model', 'Fixed Effect Est.')] = str(
+                        np.round(rs_within_coeffs["estimate"].values[0], 2)) + "\n[" \
+                                                                       + str(
+                        np.round(rs_within_coeffs["conf.low"].values[0], 2)) + ", " + str(
+                        np.round(rs_within_coeffs["conf.high"].values[0], 2)) + "]"
+
+                    # get the p-value
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")][
+                        ('Rand. Slope Model', 'p-value')] = rs_within_coeffs["p.value"].values[0]
+
+                    # Standardized Random Slope Model
+                    rs_within_std_coeffs = rs_std_coeffs.loc[(rs_std_coeffs["Component"] == "within")]
+
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")][
+                        ('Rand. Slope Model', 'Std. Fixed Effect Est.')] = str(
+                        np.round(rs_within_std_coeffs["Std_Coefficient"].values[0], 2)) + "\n[" \
+                                                                            + str(
+                        np.round(rs_within_std_coeffs["CI_low"].values[0], 2)) + ", " + str(
+                        np.round(rs_within_std_coeffs["CI_high"].values[0], 2)) + "]"
+
+                    # Random Slope Random Estimate
+                    rs_rand_coeff = rs_coeffs.loc[rs_coeffs["term"] == 'sd__' + pred + "_within"]
+                    pred_coeff_table[target][(pred_name, dset_name, "within-Effect")][
+                        ('Rand. Slope Model', 'Rand. Effect Est.')] = rs_rand_coeff["estimate"].values[0]
+
+                    # -- Second, get the between-effect coefficients -- #
+
+                    # first, extract the within predictor coefficients
+                    pred_coeff_table[target][(pred_name, dset_name, "between-Effect")] = {}
+
+                    # Fixed Effect Model
+
+                    # get the estimator row
+                    fe_between_coeffs = fe_coeffs.loc[fe_coeffs["term"] == pred + "_between"]
+
+                    # extract the Coefficient and Confidence Interval Estimate
+                    pred_coeff_table[target][(pred_name, dset_name, "between-Effect")][
+                        ('Fixed Effect Model', 'Fixed Effect Est.')] = str(
+                        np.round(fe_between_coeffs["estimate"].values[0], 2)) + "\n[" \
+                                                                       + str(
+                        np.round(fe_between_coeffs["conf.low"].values[0], 2)) + ", " + str(
+                        np.round(fe_between_coeffs["conf.high"].values[0], 2)) + "]"
+
+                    # get the p-value
+                    pred_coeff_table[target][(pred_name, dset_name, "between-Effect")][
+                        ('Fixed Effect Model', 'p-value')] = fe_between_coeffs["p.value"].values[0]
+
+                    # Standardized Fixed Effect Model
+                    fe_between_std_coeffs = fe_std_coeffs.loc[(fe_std_coefficient_df["Component"] == "between")]
+
+                    # extract the coefficient and the confidence interval
+                    pred_coeff_table[target][(pred_name, dset_name, "between-Effect")][
+                        ('Fixed Effect Model', 'Std. Fixed Effect Est.')] = str(
+                        np.round(fe_between_std_coeffs["Std_Coefficient"].values[0], 2)) + "\n[" \
+                                                                            + str(
+                        np.round(fe_between_std_coeffs["CI_low"].values[0], 2)) + ", " + str(
+                        np.round(fe_between_std_coeffs["CI_high"].values[0], 2)) + "]"
+
+                    # Random Slope Model
+                    rs_between_coeffs = rs_coeffs.loc[rs_coeffs["term"] == pred + "_between"]
+
+                    pred_coeff_table[target][(pred_name, dset_name, "between-Effect")][
+                        ('Rand. Slope Model', 'Fixed Effect Est.')] = str(
+                        np.round(rs_between_coeffs["estimate"].values[0], 2)) + "\n[" \
+                                                                      + str(
+                        np.round(rs_between_coeffs["conf.low"].values[0], 2)) + ", " + str(
+                        np.round(rs_between_coeffs["conf.high"].values[0], 2)) + "]"
+
+                    # get the p-value
+                    pred_coeff_table[target][(pred_name, dset_name, "between-Effect")][
+                        ('Fixed Effect Model', 'p-value')] = rs_between_coeffs["p.value"].values[0]
+
+                    # Standardized Random Slope Model
+                    rs_between_std_coeffs = rs_std_coeffs.loc[(rs_std_coeffs["Component"] == "between")]
+
+                    pred_coeff_table[target][(pred_name, dset_name, "between-Effect")][
+                        ('Rand. Slope Model', 'Std. Fixed Effect Est.')] = str(
+                        np.round(rs_between_std_coeffs["Std_Coefficient"].values[0], 2)) + "\n[" \
+                                                                           + str(
+                        np.round(rs_between_std_coeffs["CI_low"].values[0], 2)) + ", " + str(
+                        np.round(rs_between_std_coeffs["CI_high"].values[0], 2)) + "]"
+
+                    # the between effect has no random term because it is a level 2 predictor
+
+    return pred_coeff_table
+
+
+# helper function to create an ICC table for every mouse usage feature (as part of the descriptive statistics)
+def create_pred_icc_table(icc_results_df):
+
+    # results dict
+    icc_table = {}
+
+    # get the unique targets and datasets in the icc df
+    targets = icc_results_df["iv"].unique()
+    dsets = icc_results_df["dframe"].unique()
+
+    for target in targets:
+        for dset in dsets:
+
+            # extract the relevant info from the dataset
+            icc_row = icc_results_df.loc[(icc_results_df["iv"] == target) & (icc_results_df["dframe"] == dset)]
+
+            if len(icc_row) > 0:
+
+                icc_table[(name_change_dict[target], name_change_dict[dset])] = {}
+
+                icc_table[(name_change_dict[target], name_change_dict[dset])]["ICC"] = icc_row["ICC"].iloc[0]
+
+    return icc_table
 
 
 # %%
@@ -371,47 +417,47 @@ def create_interaction_results_table(ri_coeffs_df, ri_diag_df, rs_coeffs_df, rs_
 # ---------------------------------------
 
 # import the datasets
-task_null_mod_diag = pd.read_csv("Mouse_Task_Results/Mixed_Models/Random_Intercept/Task_results_ri_diag.csv")
-task_baseline_mod_diag = pd.read_csv("Mouse_Task_Results/Mixed_Models/Baseline/Task_results_baseline_diag.csv")
+task_null_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_ri_diag.csv")
 
 #%%
 
 # get the results table
-task_null_baseline_result_table = create_null_baseline_table(task_null_mod_diag, task_baseline_mod_diag)
+task_null_diag_table = create_null_model_table(task_null_diag)
 
 #%%
 
-
-# Single Predictor Model results
+# Predictor Model results
 # ------------------------------
 
 # import all results from the csv file (there are 5 result files)
-task_sp_fe_coeffs = pd.read_csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_fe_coeffs.csv")
-task_sp_fe_diag = pd.read_csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_fe_diag.csv")
-task_sp_re_coeffs = pd.read_csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_re_coeffs.csv")
-task_sp_re_diag = pd.read_csv("Mouse_Task_Results/Mixed_Models/Single_Predictor/Task_results_sp_re_diag.csv")
+task_pred_fe_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_fe_coeffs.csv")
+task_pred_fe_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_fe_diag.csv")
+task_pred_fe_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_fe_std_coeffs.csv")
 
-# %%
+task_pred_rs_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_rs_coeffs.csv")
+task_pred_rs_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_rs_diag.csv")
+task_pred_rs_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_rs_std_coeffs.csv")
 
-# get the results table
-task_single_pred_results_table = create_single_pred_result_table(task_sp_fe_coeffs, task_sp_fe_diag,
-                                                                 task_sp_re_coeffs, task_sp_re_diag)
+task_pred_model_comp = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_model_comparison.csv")
 
-# %%
+#%%
 
-# Interaction Effect Results
-# ---------------------------
+# Get the model diagnostics result table for the single predictor models
+task_pred_diag_table = create_pred_diag_table(task_pred_fe_diag, task_pred_rs_diag, task_pred_model_comp)
 
-task_ie_fe_coeff = pd.read_csv("Mouse_Task_Results/Mixed_Models/Interactions/Task_results_interaction_fe_coeffs.csv")
-task_ie_fe_diag = pd.read_csv("Mouse_Task_Results/Mixed_Models/Interactions/Task_results_interaction_fe_diags.csv")
-task_ie_re_coeff = pd.read_csv("Mouse_Task_Results/Mixed_Models/Interactions/Task_results_interaction_re_coeffs.csv")
-task_ie_re_diag = pd.read_csv("Mouse_Task_Results/Mixed_Models/Interactions/Task_results_interaction_re_diags.csv")
+#%%
 
-# %%
+# get the effect coefficient result table for the single predictor models
+task_pred_coefficient_table = create_pred_coefficients_table(task_pred_fe_coeffs, task_pred_fe_std_coeffs,
+                                                             task_pred_rs_coeffs, task_pred_rs_std_coeffs)
 
-# get the results table
-task_interaction_results_table = create_interaction_results_table(task_ie_fe_coeff, task_ie_fe_diag,
-                                                                  task_ie_re_coeff, task_ie_re_diag)
+#%%
+
+# get the ICC table for all mouse usage features (part of the descriptive stats)
+
+# import the ICC dataset
+task_icc_df = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_MousePred_ICC.csv")
+task_icc_table = create_pred_icc_table(task_icc_df)
 
 
 # %%
@@ -424,13 +470,12 @@ task_interaction_results_table = create_interaction_results_table(task_ie_fe_coe
 # ---------------------------------------
 
 # import the datasets
-free_null_mod_diag = pd.read_csv("Free_Mouse_Results/Mixed_Model_Results/Random_Intercept/Free_Mouse_results_ri_diag.csv")
-free_baseline_mod_diag = pd.read_csv("Free_Mouse_Results/Mixed_Model_Results/Baseline/Free_results_baseline_diag.csv")
+free_null_mod_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_ri_diag.csv")
 
 #%%
 
 # get the results table
-free_null_baseline_result_table = create_null_baseline_table(free_null_mod_diag, free_baseline_mod_diag)
+free_null_result_table = create_null_model_table(free_null_mod_diag)
 
 #%%
 
@@ -438,40 +483,35 @@ free_null_baseline_result_table = create_null_baseline_table(free_null_mod_diag,
 # ------------------------------
 
 # import all results from the csv file (there are 5 result files)
-free_sp_fe_coeffs = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Single_predictor/Free_Mouse_results_sp_fe_coeffs.csv")
-free_sp_fe_diag = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Single_predictor/Free_Mouse_results_sp_fe_diag.csv")
-free_sp_re_coeffs = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Single_predictor/Free_Mouse_results_sp_re_coeffs.csv")
-free_sp_re_diag = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Single_predictor/Free_Mouse_results_sp_re_diag.csv")
+# import all results from the csv file (there are 5 result files)
+free_pred_fe_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_fe_coeffs.csv")
+free_pred_fe_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_fe_diag.csv")
+free_pred_fe_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_fe_std_coeffs.csv")
 
-# %%
+free_pred_rs_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_rs_coeffs.csv")
+free_pred_rs_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_rs_diag.csv")
+free_pred_rs_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_rs_std_coeffs.csv")
 
-# get the results table
-free_single_pred_results_table = create_single_pred_result_table(free_sp_fe_coeffs, free_sp_fe_diag,
-                                                                 free_sp_re_coeffs, free_sp_re_diag)
+free_pred_model_comp = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_model_comparison.csv")
 
-# %%
+#%%
 
-# Interaction Effect Results
-# ---------------------------
+# Get the model diagnostics result table for the single predictor models
+free_pred_diag_table = create_pred_diag_table(free_pred_fe_diag, free_pred_rs_diag, free_pred_model_comp)
 
-free_ie_fe_coeff = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Interactions/Free_Mouse_results_interaction_fe_coeffs.csv")
-free_ie_fe_diag = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Interactions/Free_Mouse_results_interaction_fe_diags.csv")
-free_ie_re_coeff = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Interactions/Free_Mouse_results_interaction_re_coeffs.csv")
-free_ie_re_diag = pd.read_csv(
-    "Free_Mouse_Results/Mixed_Model_Results/Interactions/Free_Mouse_results_interaction_re_diags.csv")
+#%%
 
-# %%
+# get the effect coefficient result table for the single predictor models
+free_pred_coefficient_table = create_pred_coefficients_table(free_pred_fe_coeffs, free_pred_fe_std_coeffs,
+                                                             free_pred_rs_coeffs, free_pred_rs_std_coeffs)
 
-# get the results table
-free_interaction_results_table = create_interaction_results_table(free_ie_fe_coeff, free_ie_fe_diag,
-                                                                  free_ie_re_coeff, free_ie_re_diag)
+#%%
+
+# get the ICC table for all mouse usage features (part of the descriptive stats)
+
+# import the ICC dataset
+free_icc_df = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_MousePred_ICC.csv")
+free_icc_table = create_pred_icc_table(free_icc_df)
 
 
 #%%
@@ -479,35 +519,150 @@ free_interaction_results_table = create_interaction_results_table(free_ie_fe_coe
 # Get some descriptive stats about the models, because manually reading them from the tables is tideous
 # -----------------------------------------------------------------------------------------------------
 
-# helper function to get some descriptive stats about the null-model/baseline-model comparison
-def null_baseline_comparison(baseline_results, target):
+# Get info about
 
-    print(f'Null-Baseline Comparions for target {target}')
+# - Coefficient estimates, their p-values and confidence intervals
 
-    # first create dataframes for the baseline results and model results using the specified target
-    baseline_df = pd.DataFrame.from_dict(baseline_results, orient='index').rename_axis(["target", "dset"]).round(2).loc[
-                  target, :]
+# simple helper function to print descriptive stats about the ICC across the datasets for a specified target variable
+def describe_null_model(results_table, target):
 
-    # drop duplicates (because standardization doesnt matter)
-    baseline_df = baseline_df.drop_duplicates(subset=[("Null Model", "AIC")])
+    # create the relevant dataframe from the null model results table
+    null_mod = pd.DataFrame.from_dict(results_table, orient='index').rename_axis(["target", "dset"]).round(2).loc[target, :].droplevel(0, axis=1)
 
-    # get the difference scores between null modell and baseline model
-    baseline_df[("Comp", "AIC")] = baseline_df[("Baseline Model", "AIC")] - baseline_df[("Null Model", "AIC")]
-    baseline_df[("Comp", "R²-cond")] = baseline_df[("Baseline Model", "R²-cond")] - baseline_df[("Null Model", "R²-cond")]
+    # simply describe the ICC column of the dataframe for the specified target variable to get the relevant descriptive
+    # stats
+    print(f"ICC Descriptives for target {target}")
+    print(null_mod["ICC"].describe())
 
-    if len(baseline_df) > 1:
-        print(f"Mean delta AIC: {baseline_df[('Comp', 'AIC')].mean()}")
-        print(f"SD delta AIC: {baseline_df[('Comp', 'AIC')].std()}")
-        print(f"Mean delta R²-cond: {baseline_df[('Comp', 'R²-cond')].mean()}")
-        print(f"SD delta R²-cond: {baseline_df[('Comp', 'R²-cond')].std()}")
+    return
+
+#%%
+
+
+# helper function to print infos about the model comparisons
+def describe_model_comparison(null_diag_table, pred_diag_table, target):
+
+    # create the relevant dataframe from the null_diag_table
+    null_diag = pd.DataFrame.from_dict(null_diag_table, orient='index').rename_axis(["target", "dset"]).round(4).loc[
+               target, :]
+
+    # create the relevant dataframe from the pred_diag_table
+    pred_diag = pd.DataFrame.from_dict(pred_diag_table[target], orient='index').rename_axis(["target", "dset"])
+    # replace R²-marg values with NaN in the random slope model if no R²-cond could be computed for the row due to
+    # missing variance in the slope (use a simple hack and add the nan column first and then subtract it again)
+    pred_diag[("Rand. Slope Model", "R²-marg")] = pred_diag[("Rand. Slope Model", "R²-marg")] + pred_diag[("Rand. Slope Model", "R²-cond")]
+    pred_diag[("Rand. Slope Model", "R²-marg")] = pred_diag[("Rand. Slope Model", "R²-marg")] - pred_diag[("Rand. Slope Model", "R²-cond")]
+
+    # merge both datasets
+    merged_df = pred_diag.join(null_diag, how="inner")
+
+    # count the number of calculated models
+    print(f"Number of calculated models: {len(merged_df)}\n")
+
+    # count the number of significant loglikelihood ratio tests between the null model and the fixed effect model
+    print("Num. of significant Log Likelihood Tests between the fixed effect model and the null model")
+    print(len(merged_df.loc[merged_df[("Fixed Effect Model", "-2ΔLL")] < 0.05]))
+    print("After Bonferroni correction")
+    print(len(merged_df.loc[merged_df[("Fixed Effect Model", "-2ΔLL")] < (0.05 / len(merged_df))]))
+    print("\n")
+
+    # count the number of significant loglikelhood ratio tests between the random slope model and the fixed effect model
+    print("Num. of significant Log Likelihood Tests between the random slope model and the fixed effect model")
+    print(len(merged_df.loc[merged_df[("Rand. Slope Model", "-2ΔLL")] < 0.05]))
+    print("After Bonferroni correction")
+    print(len(merged_df.loc[merged_df[("Rand. Slope Model", "-2ΔLL")] < (0.05 / len(merged_df))]))
+    print("\n")
+
+    # calculate the R²-value differences between the models
+    merged_df[("Comp", "F-N_R2_cond")] = merged_df[("Fixed Effect Model", "R²-cond")] - merged_df[("Null Model", "R²-cond")]
+    merged_df[("Comp", "F-N_R2_marg")] = merged_df[("Fixed Effect Model", "R²-marg")] - merged_df[("Null Model", "R²-marg")]
+    merged_df[("Comp", "F-N_R2_cum")] = merged_df[("Fixed Effect Model", "R²-cum")] - merged_df[("Null Model", "R²-cum")]
+
+    merged_df[("Comp", "S-F_R2_cond")] = merged_df[("Rand. Slope Model", "R²-cond")] - merged_df[("Fixed Effect Model", "R²-cond")]
+    merged_df[("Comp", "S-F_R2_marg")] = merged_df[("Rand. Slope Model", "R²-marg")] - merged_df[("Fixed Effect Model", "R²-marg")]
+    merged_df[("Comp", "S-F_R2_cum")] = merged_df[("Rand. Slope Model", "R²-cum")] - merged_df[("Fixed Effect Model", "R²-cum")]
+
+    # get descriptives about the R²-changes
+    print(merged_df[("Comp", "F-N_R2_cond")].describe())
+    print("\n")
+    print(merged_df[("Comp", "F-N_R2_marg")].describe())
+    print("\n")
+    print(merged_df[("Comp", "F-N_R2_cum")].describe())
+    print("\n")
+
+    # we need to drop some columns which had propblems with the R²-cond and R²-marg calculation due to missing variance
+    # in the random slope
+    print(merged_df[("Comp", "S-F_R2_cond")].dropna(how="all").describe())
+    print("\n")
+    print(merged_df[("Comp", "S-F_R2_marg")].dropna(how="all").describe())
+    print("\n")
+    print(merged_df[("Comp", "S-F_R2_cum")].describe())
+    print("\n")
+
+    return
+
+#%%
+
+
+# simple helper function to describe the model coefficients
+def describe_coefficients(coeff_table, target):
+
+    # create a dataframe for the target variable
+    coeff_df = pd.DataFrame.from_dict(coeff_table[target], orient='index').rename_axis(["target", "dset", "effect"])
+
+    # get the between effect coefficients
+    between_coeffs = coeff_df.xs("between-Effect", axis=0, level=2, drop_level=False)
+    # count the number of significant between effects
+    print(f"Number of significant between effects in the fixed effect model: "
+          f"{len(between_coeffs.loc[between_coeffs[('Fixed Effect Model', 'p-value')] < 0.05])}")
+    print(f"After Bonferroni Correction: "
+          f"{len(between_coeffs.loc[between_coeffs[('Fixed Effect Model', 'p-value')] < (0.05/len(between_coeffs))])}")
+
+    print(f"Number of significant between effects in the random slope model: "
+          f"{len(between_coeffs.loc[between_coeffs[('Rand. Slope Model', 'p-value')] < 0.05])}")
+    print(f"After Bonferroni Correction: "
+          f"{len(between_coeffs.loc[between_coeffs[('Rand. Slope Model', 'p-value')] < (0.05 / len(between_coeffs))])}")
+
+    # do the same with the within-effects
+    within_coeffs = coeff_df.xs("within-Effect", axis=0, level=2, drop_level=False)
+    # count the number of significant between effects
+    print(f"Number of significant within effects in the fixed effect model: "
+          f"{len(within_coeffs.loc[within_coeffs[('Fixed Effect Model', 'p-value')] < 0.05])}")
+    print(f"After Bonferroni Correction: "
+          f"{len(within_coeffs.loc[within_coeffs[('Fixed Effect Model', 'p-value')] < (0.05 / len(within_coeffs))])}")
+
+    print(f"Number of significant within effects in the random slope model: "
+          f"{len(within_coeffs.loc[within_coeffs[('Rand. Slope Model', 'p-value')] < 0.05])}")
+    print(f"After Bonferroni Correction: "
+          f"{len(within_coeffs.loc[within_coeffs[('Rand. Slope Model', 'p-value')] < (0.05 / len(within_coeffs))])}")
+
+    # finally, get the range of the random slope of the within-effect
+    print("Descriptive Stats about the random slope effect")
+    print(within_coeffs[('Rand. Slope Model', 'Rand. Effect Est.')].describe())
+
+    return
+
+#%%
+
+# test = describe_model_comparison(task_null_diag_table, task_pred_diag_table, "arousal")
+
+test = describe_coefficients(task_pred_coefficient_table, "arousal")
+
+
+#%%
+
+# helper function to get the Log Likelihood Significance Value (significant or not significant)
+def _get_loglikelihood_sig(mod_comp_data, position):
+
+    # extract the p-value
+    p_val = mod_comp_data.at[position, 'p']
+
+    if p_val >= 0.05:
+        return "n.s."
     else:
-        print(f"Delta AIC: {baseline_df[('Comp', 'AIC')]}")
-        print(f"Delta R²-cond: {baseline_df[('Comp', 'R²-cond')]}")
+        return " < .05"
 
-# bad coded helper function to get some descriptive information about the results for the paper
-# bad coded because some things are redundant and it might be better to get the desc. stats in differen step, with
-# a different approach (the following was the straightforward, short cut solution)
-# e.g. which of the competing models (baseline vs. random intercept vs. random intercept & slope) has the "best fit"
+#%%
 def describe_results(baseline_results, model_results, target):
 
     print(f"Get some descriptive results for target: {target}")
@@ -640,6 +795,8 @@ def describe_results(baseline_results, model_results, target):
 
 #%%
 
+
+
 # get the descriptive stats for the single predictor model and the interaction model, per target variable (arousal,
 # valence, stress) and for the mouse task data and the free-mouse data
 
@@ -649,7 +806,6 @@ def describe_results(baseline_results, model_results, target):
 # baseline comparison
 null_baseline_comparison(task_null_baseline_result_table, 'arousal')
 null_baseline_comparison(task_null_baseline_result_table, 'valence')
-null_baseline_comparison(task_null_baseline_result_table, 'stress')
 
 #%%
 
@@ -662,24 +818,6 @@ print("\nGet desc result stats for the mouse task single predictor models and ta
 valence_intercept, valence_slope = describe_results(task_null_baseline_result_table, task_single_pred_results_table, 'valence')
 valence_intercept_desc, valence_slope_desc = valence_intercept.describe(), valence_slope.describe()
 
-print("\nGet desc result stats for the mouse task single predictor models and target stress")
-stress_intercept, stress_slope = describe_results(task_null_baseline_result_table, task_single_pred_results_table, 'stress')
-stress_intercept_desc, stress_slope_desc = stress_intercept.describe(), stress_slope.describe()
-
-#%%
-# interaction models
-
-print("Get desc result stats for the mouse task interaction models and target arousal")
-arousal_intercept, arousal_slope = describe_results(task_null_baseline_result_table, task_interaction_results_table, 'arousal')
-arousal_intercept_desc, arousal_slope_desc = arousal_intercept.describe(), arousal_slope.describe()
-
-print("\nGet desc result stats for the mouse task interaction models and target valence")
-valence_intercept, valence_slope = describe_results(task_null_baseline_result_table, task_interaction_results_table, 'valence')
-valence_intercept_desc, valence_slope_desc = valence_intercept.describe(), valence_slope.describe()
-
-print("\nGet desc result stats for the mouse task interaction models and target stress")
-stress_intercept, stress_slope = describe_results(task_null_baseline_result_table, task_interaction_results_table, 'stress')
-stress_intercept_desc, stress_slope_desc = stress_intercept.describe(), stress_slope.describe()
 
 #%%
 
@@ -687,50 +825,16 @@ stress_intercept_desc, stress_slope_desc = stress_intercept.describe(), stress_s
 # ...............
 
 # baseline comparison
-null_baseline_comparison(free_null_baseline_result_table, 'arousal')
-null_baseline_comparison(free_null_baseline_result_table, 'valence')
-null_baseline_comparison(free_null_baseline_result_table, 'stress')
-
 
 #%%
 
 # single pred models
 
-print("Get desc result stats for the free-mouse single predictor models and target arousal")
-arousal_intercept, arousal_slope = describe_results(free_null_baseline_result_table, free_single_pred_results_table, 'arousal')
-arousal_intercept_desc, arousal_slope_desc = arousal_intercept.describe(), arousal_slope.describe()
 
 #%%
 
 print("\nGet desc result stats for the free-mouse single predictor models and target valence")
-valence_intercept, valence_slope = describe_results(free_null_baseline_result_table, free_single_pred_results_table, 'valence')
-valence_intercept_desc, valence_slope_desc = valence_intercept.describe(), valence_slope.describe()
 
-#%%
-
-print("\nGet desc result stats for the free-mouse single predictor models and target stress")
-stress_intercept, stress_slope = describe_results(free_null_baseline_result_table, free_single_pred_results_table, 'stress')
-stress_intercept_desc, stress_slope_desc = stress_intercept.describe(), stress_slope.describe()
-
-#%%
-
-# interaction models
-
-print("Get desc result stats for the mouse task interaction models and target arousal")
-arousal_intercept, arousal_slope = describe_results(free_null_baseline_result_table, free_interaction_results_table, 'arousal')
-arousal_intercept_desc, arousal_slope_desc = arousal_intercept.describe(), arousal_slope.describe()
-
-#%%
-
-print("\nGet desc result stats for the mouse task interaction models and target valence")
-valence_intercept, valence_slope = describe_results(free_null_baseline_result_table, free_interaction_results_table, 'valence')
-valence_intercept_desc, valence_slope_desc = valence_intercept.describe(), valence_slope.describe()
-
-#%%
-
-print("\nGet desc result stats for the mouse task interaction models and target stress")
-stress_intercept, stress_slope = describe_results(free_null_baseline_result_table, free_interaction_results_table, 'stress')
-stress_intercept_desc, stress_slope_desc = stress_intercept.describe(), stress_slope.describe()
 
 #%%
 

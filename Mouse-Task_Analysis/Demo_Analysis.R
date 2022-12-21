@@ -49,13 +49,26 @@ model_infos <- function(mod) {
   
 }
 
+library(MuMIn)
+
 # regular model
 m1 <- lmer(NegAff ~ STRESS + (1| UserID), data = aces_daily)
 model_infos(m1)
+cor(model.response(model.frame(m1)),predict(m1,type="response"))^2
+r2_nakagawa(m1, by_group = TRUE)
+MuMIn::r.squaredGLMM(m1)
 
 # model with demenead IVs
 m2 <-  lmer(NegAff ~ STRESS_between + STRESS_within + (1| UserID), data = aces_daily)
 model_infos(m2)
+cor(model.response(model.frame(m2)),predict(m2, type="response"))^2
+MuMIn::r.squaredGLMM(m2)
+
+m2.5 <- lmer(NegAff ~ STRESS_between + STRESS_within + (STRESS_within| UserID), data = aces_daily)
+model_infos(m2.5)
+cor(model.response(model.frame(m2.5)),predict(m2.5, type="response"))^2
+r2_nakagawa(m2.5, by_group = TRUE)
+MuMIn::r.squaredGLMM(m2.5)
 
 # model with centered DV and centered IV
 m3 <- lmer(NegAff_within ~ STRESS_within + (1| UserID), data = aces_daily)

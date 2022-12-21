@@ -23,6 +23,7 @@ library(broom.mixed)
 library(ggeffects)
 library(caret)
 library(Hmisc)
+library(merTools)
 
 # to show images in a separate window
 # options(device='windows')
@@ -437,6 +438,15 @@ fit_mixed_model <- function(dataset, model_formular, mod_name, plot_diag = F) {
   # calculate the model performance criteria
   model_diag <- performance::model_performance(mod)
   
+  # calculate another R² value as the squared correlation between the
+  # response variabe the and predicted values, which is suggested
+  # by Hoffman et al., 2015 and also mentioned in a blog post about mixed model
+  # goodness-of-fit coefficients by the author of the lme4 package
+  # http://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#how-do-i-compute-a-coefficient-of-determination-r2-or-an-analogue-for-glmms
+  explained_var <- cor(model.response(model.frame(mod)),predict(mod,type="response"))^2
+  # add ot to the model diagnostic criteria
+  model_diag["pseudo_R2"] <- explained_var
+  
   # return the model, the model coefficients and the performance criteria in a list
   list(mod = mod, coeffs = coefficients, std_coeffs=standardized_coeffs,
        model_diag = model_diag)
@@ -530,6 +540,8 @@ rs_diag_list <- list()
 
 model_comparison <- list()
 
+mouse_icc <- list()
+
 
 # loop over all dataframes
 for (i in seq_along(dataset_list)) {
@@ -584,13 +596,24 @@ for (i in seq_along(dataset_list)) {
       rs_std_coeff_list[[paste0(iv, "_", dset_name, "_", dv)]] <- rs_std_coeffs
       rs_diag_list[[paste0(iv, "_", dset_name, "_", dv)]] <- rs_diag
       
-      # finally, compare the nested models
+      # then, compare the nested models
       comparison <- performance::test_performance(icc_model[["mod"]],
                                                   fe_model[["mod"]],
                                                   rs_model[["mod"]]) %>%
         mutate(iv = iv, dv = dv, dframe = dset_name)
       # and add the it to the results list
       model_comparison[[paste0(iv, "_", dset_name, "_", dv)]] <- comparison
+      
+      # finally, also calculate the ICC for a random intercept only model with
+      # the mouse usage predictor as the dependent variable to check how much
+      # between-person variance and within-person variance the mouse usage
+      # features have
+      mouseICC <- merTools::ICC(outcome = iv, group = "ID", data = dset)
+      icc_df <- data.frame (ICC  = c(mouseICC),
+                        iv = c(iv),
+                        dframe = c(dset_name))
+      # add it to the results list
+      mouse_icc[[paste0(iv, "_", dset_name, "_", dv)]] <- icc_df
       
     }
   }
@@ -605,7 +628,8 @@ mouse_task_results <- list("Task_results_ri_coeffs" = dplyr::bind_rows(ri_coeff_
                    "Task_results_rs_coeffs" = dplyr::bind_rows(rs_coeff_list),
                    "Task_results_rs_std_coeffs" = dplyr::bind_rows(rs_std_coeff_list),
                    "Task_results_rs_diag" = dplyr::bind_rows(rs_diag_list),
-                   "Task_results_model_comparison" = dplyr::bind_rows(model_comparison))
+                   "Task_results_model_comparison" = dplyr::bind_rows(model_comparison),
+                   "Task_results_MousePred_ICC" = dplyr::bind_rows(mouse_icc))
 
 # save the results as csv files
 save_model_results(mouse_task_results)
@@ -620,7 +644,8 @@ mouse_task_results <- list(
   "Task_results_rs_coeffs" = read.csv("Results_NEW/task_results_rs_coeffs.csv"),
   "Task_results_rs_std_coeffs" = read.csv("Results_NEW/task_results_rs_std_coeffs.csv"),
   "Task_results_rs_diag" = read.csv("Results_NEW/task_results_rs_diag.csv"),
-  "Task_results_model_comparison" = read.csv("Results_NEW/task_results_model_comparison.csv")
+  "Task_results_model_comparison" = read.csv("Results_NEW/task_results_model_comparison.csv"),
+  "Task_results_MousePred_ICC" = read.csv("Results_NEW/Task_results_MousePred_ICC")
 )
 
 
@@ -699,7 +724,7 @@ compare_with_test_std <- mouse_task_results[["Task_results_fe_std_coeffs"]] %>%
   dplyr::select(Std_Coefficient, Parameter)
 
 
-write.csv(test_results, "Orig_STD_Pred.csv", row.names=FALSE)
+write.csv(test_std_results, "Orig_STD_Pred.csv", row.names=FALSE)
 write.csv(compare_with_test_std, "Within_Between_STD_Pred.csv", row.names=FALSE)
 
 

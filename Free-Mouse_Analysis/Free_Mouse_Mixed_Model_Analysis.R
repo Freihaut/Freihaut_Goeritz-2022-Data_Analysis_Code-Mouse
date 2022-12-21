@@ -23,12 +23,14 @@ library(broom.mixed)
 library(ggeffects)
 library(caret)
 library(Hmisc)
+library(merTools)
 
 # plot to windows (because Pycharm does not show plots in R)
 # options(device='windows')
 
 # get the current working directory (all plots and data are saved in the current working directory!)
 wd <- getwd()
+setwd("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis")
 
 ##############
 # Data Setup #
@@ -132,12 +134,12 @@ for (option in pause_thresholds) {
   # get the raw data set
   data_to_transform <- mouse_data
 
-  print(paste0("Creating Dataset for pause threshold ", p_thresh, "ms"))
+  print(paste0("Creating Dataset for pause threshold ", option, "ms"))
 
   # select the relevant ivs for the specified pause threshold (add the pause threshold and X to the name, if it exists
   # in the column names vector of the dataframe (the lockscreen time variables have no pause threshold prefix)
-  sel_ivs <- ifelse(is.element(paste0('X', p_thresh, "_", ivs), colnames(data_to_transform)),
-                    paste0('X', p_thresh, "_", ivs), ivs)
+  sel_ivs <- ifelse(is.element(paste0('X', option, "_", ivs), colnames(data_to_transform)),
+                    paste0('X', option, "_", ivs), ivs)
 
   # create the relevant dataset (most of the following code could be done in one pipeline. I prefer to separate it
   # for better readability of the steps. This preference likely is not very R-like)
@@ -147,17 +149,17 @@ for (option in pause_thresholds) {
     # rename the selected columns to the iv names
     rename_with(~ ivs[which(sel_ivs == .x)], .cols = sel_ivs) %>%
     # filter out all non selected/renamed iv columns
-    select(!matches("1000|2000|3000"))
+    dplyr::select(!matches("1000|2000|3000"))
   
   # Step 2: Remove highly correlated features from the dataset
-  corr_table <- data_to_transform %>% select(all_of(ivs)) %>% cor(.)
+  corr_table <- data_to_transform %>% dplyr::select(all_of(ivs)) %>% cor(.)
   # find the index of all bivariate correlations above the specified threshold using the caret::findCorrelation func
   # https://www.rdocumentation.org/packages/caret/versions/6.0-90/topics/findCorrelation
   index <- caret::findCorrelation(corr_table, .80, exact = FALSE)
   # get the names of the columns that will be removed
   to_be_removed <- colnames(corr_table)[index]
   # remove the columns from the dataframe
-  data_to_transform <- data_to_transform %>%  select(-all_of(to_be_removed))
+  data_to_transform <- data_to_transform %>%  dplyr::select(-all_of(to_be_removed))
   
   # get the remaining predictors
   remaining_predictors <- ivs[ivs %in% colnames(data_to_transform)]
@@ -198,7 +200,7 @@ model_diagnostic_plots <- function (model, filename, data) {
   
   # create a PDF that has both diagnostic visualization plots on a seperate page
   # the PDFs are saved in the current working directory
-  pdf(paste0('Task_',filename,".pdf"),
+  pdf(paste0('FreeMouse_',filename,".pdf"),
       width = 10, height = 8,
       bg = "white",
       colormodel = "cmyk",
@@ -303,7 +305,7 @@ plot_single_pred_mixed_model <- function (dataset, predictor, target) {
   
   # save the plots in a PDF file (each plot on an individual page in the file)
   # different pathname depending on the model family (binomial vs. gaussian)
-  save_path <- paste0("Task_single_pred_", predictor, '_', target, ".pdf")
+  save_path <- paste0("FreeMouse_single_pred_", predictor, '_', target, ".pdf")
   # create the pdf in which the plots are saved
   pdf(save_path,
       width = 10, height = 8,
@@ -348,6 +350,15 @@ fit_mixed_model <- function(dataset, model_formular, mod_name, plot_diag = F) {
   
   # calculate the model performance criteria
   model_diag <- performance::model_performance(mod)
+  
+  # calculate another R² value as the squared correlation between the
+  # response variabe the and predicted values, which is suggested
+  # by Hoffman et al., 2015 and also mentioned in a blog post about mixed model
+  # goodness-of-fit coefficients by the author of the lme4 package
+  # http://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#how-do-i-compute-a-coefficient-of-determination-r2-or-an-analogue-for-glmms
+  explained_var <- cor(model.response(model.frame(mod)),predict(mod,type="response"))^2
+  # add ot to the model diagnostic criteria
+  model_diag["pseudo_R2"] <- explained_var
   
   # return the model, the model coefficients and the performance criteria in a list
   list(mod = mod, coeffs = coefficients, std_coeffs=standardized_coeffs,
@@ -442,6 +453,8 @@ rs_diag_list <- list()
 
 model_comparison <- list()
 
+mouse_icc <- list()
+
 
 # loop over all dataframes
 for (i in seq_along(dataset_list)) {
@@ -496,13 +509,24 @@ for (i in seq_along(dataset_list)) {
       rs_std_coeff_list[[paste0(iv, "_", dset_name, "_", dv)]] <- rs_std_coeffs
       rs_diag_list[[paste0(iv, "_", dset_name, "_", dv)]] <- rs_diag
       
-      # finally, compare the nested models
+      # then, compare the nested models
       comparison <- performance::test_performance(icc_model[["mod"]],
                                                   fe_model[["mod"]],
                                                   rs_model[["mod"]]) %>%
         mutate(iv = iv, dv = dv, dframe = dset_name)
       # and add the it to the results list
       model_comparison[[paste0(iv, "_", dset_name, "_", dv)]] <- comparison
+      
+      # finally, also calculate the ICC for a random intercept only model with
+      # the mouse usage predictor as the dependent variable to check how much
+      # between-person variance and within-person variance the mouse usage
+      # features have
+      mouseICC <- merTools::ICC(outcome = iv, group = "ID", data = dset)
+      icc_df <- data.frame (ICC  = c(mouseICC),
+                            iv = c(iv),
+                            dframe = c(dset_name))
+      # add it to the results list
+      mouse_icc[[paste0(iv, "_", dset_name, "_", dv)]] <- icc_df
       
     }
   }
@@ -517,22 +541,24 @@ freeMouse_results <- list("FreeMouse_results_ri_coeffs" = dplyr::bind_rows(ri_co
                            "FreeMouse_results_rs_coeffs" = dplyr::bind_rows(rs_coeff_list),
                            "FreeMouse_results_rs_std_coeffs" = dplyr::bind_rows(rs_std_coeff_list),
                            "FreeMouse_results_rs_diag" = dplyr::bind_rows(rs_diag_list),
-                           "FreeMouse_results_model_comparison" = dplyr::bind_rows(model_comparison))
+                           "FreeMouse_results_model_comparison" = dplyr::bind_rows(model_comparison),
+                          "FreeMouse_results_MousePred_ICC" = dplyr::bind_rows(mouse_icc))
 
 # save the results as csv files
 save_model_results(freeMouse_results)
 
 # If already Calculated: Import the results from the CSV files instead of running the loop
 freeMouse_results <- list(
-  "FreeMouse_results_ri_coeffs" = read.csv(""),
-  "FreeMouse_results_ri_diag" = read.csv(""),
-  "FreeMouse_results_fe_coeffs" = read.csv(""),
-  "FreeMouse_results_fe_std_coeffs" = read.csv(""),
-  "FreeMouse_results_fe_diag" = read.csv(""),
-  "FreeMouse_results_rs_coeffs" = read.csv(""),
-  "FreeMouse_results_rs_std_coeffs" = read.csv(""),
-  "FreeMouse_results_rs_diag" = read.csv(""),
-  "FreeMouse_results_model_comparison" = read.csv("")
+  "FreeMouse_results_ri_coeffs" = read.csv("Results_NEW/FreeMouse_results_ri_coeffs.csv"),
+  "FreeMouse_results_ri_diag" = read.csv("Results_NEW/FreeMouse_results_ri_diag.csv"),
+  "FreeMouse_results_fe_coeffs" = read.csv("Results_NEW/FreeMouse_results_fe_coeffs.csv"),
+  "FreeMouse_results_fe_std_coeffs" = read.csv("Results_NEW/FreeMouse_results_fe_std_coeffs.csv"),
+  "FreeMouse_results_fe_diag" = read.csv("Results_NEW/FreeMouse_results_fe_diag.csv"),
+  "FreeMouse_results_rs_coeffs" = read.csv("Results_NEW/FreeMouse_results_rs_coeffs.csv"),
+  "FreeMouse_results_rs_std_coeffs" = read.csv("Results_NEW/FreeMouse_results_rs_std_coeffs.csv"),
+  "FreeMouse_results_rs_diag" = read.csv("Results_NEW/FreeMouse_results_rs_diag.csv"),
+  "FreeMouse_results_model_comparison" = read.csv("Results_NEW/FreeMouse_results_model_comparison.csv"),
+  "FreeMouse_results_MousePred_ICC" = read.csv("Results_NEW/FreeMouse_results_model_comparison.csv")
 )
 
 
