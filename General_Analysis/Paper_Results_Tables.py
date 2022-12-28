@@ -8,7 +8,7 @@ For questions regarding the code, please contact: paul.freihaut@psychologie.uni-
 # package imports
 import pandas as pd
 import numpy as np
-import json
+import pickle
 
 #%%
 
@@ -61,35 +61,35 @@ name_change_dict = {
     "no_movement": 'No Movement',
     "lockscreen_time": 'Lockscreen Time',
     "movement_episodes": 'Num. of Move Ep.',
+    'movement_distance': 'Movement Distance',
     "mo_ep_sd_abs_jerk_mean": 'Move Ep. (sd): Jerk (mean)',
+    'mo_ep_mean_abs_jerk_sd': 'Move Ep. (mean): Jerk (sd)',
+    'mo_ep_sd_abs_jerk_sd': 'Move Ep. (sd): Jerk (sd)',
     "mo_ep_sd_angle_mean": 'Move Ep. (sd): Angle (mean)',
     "mo_ep_mean_angle_sd": 'Move Ep. (mean): Angle (sd)',
     "mo_ep_mean_speed_sd": 'Move Ep. (mean): Speed (sd)',
     "mo_ep_sd_total_dist": 'Move Ep. (sd): Tot. Distance',
     "mo_ep_mean_y_flips": 'Move Ep. (mean): Y-Flips',
+    'mo_ep_sd_y_flips': 'Move Ep. (sd): Y-Flips',
+    'mo_ep_sd_x_flips': 'Move Ep. (sd): X-Flips',
+    'mo_ep_sd_episode_duration': 'Move Ep. (sd): Eps. Duration',
     "lockscreen_episodes.": 'Num. of Lockscreen Eps.',
     # task datasets
     'cutoff_0': 'dur. cutoff',
     'iqr_out_2.5': 'IQR 2.5',
     'iqr_out_3.5': 'IQR 3.5',
     # for ml results
-    'by_sample_cutoff': 'dur. cutoff & std. by sample',
-    'by_sample_iqr_2.5': 'IQR 2.5 & std. by sample',
-    'by_sample_iqr_3.5': 'IQR 3.5 & std. by sample',
-    'by_participant_cutoff': 'dur. cutoff & std. by par',
-    'by_participant_iqr_2.5': 'IQR 2.5 & std. by par',
-    'by_participant_iqr_3.5': 'IQR 3.5 & std. by par',
+    'cutoff': 'dur. cutoff',
+    'iqr_2.5': 'IQR 2.5',
+    'iqr_3.5': 'IQR 3.5',
     # free mouse datasets
     '1000': '1s pause thresh',
     '2000': '2s pause thresh',
     '3000': '3s pause thresh',
-    # for ml results
-    '1000_by_sample': '1s pause & std. by sample',
-    '2000_by_sample': '2s pause & std. by sample',
-    '3000_by_sample': '3s pause & std. by sample',
-    '1000_by_participant': '1s pause & std. by par',
-    '2000_by_participant': '2s pause & std. by par',
-    '3000_by_participant': '3s pause & std. by par',
+    # for ml analysis
+    'pause_thresh_1000': '1s pause thresh',
+    'pause_thresh_2000': '2s pause thresh',
+    'pause_thresh_3000': '3s pause thresh',
 }
 
 
@@ -129,17 +129,19 @@ def create_null_model_table(null_df):
     for target in targets:
         for dset in dsets:
 
-            null_table[(target, name_change_dict[dset])] = {}
+            dset_name = name_change_dict[str(dset)]
+
+            null_table[(target, dset_name)] = {}
 
             # get the target, dset subset from the dataframes
             null_diag = null_df.loc[(null_df["dv"] == target) & (null_df["dframe"] == dset)]
 
             # get the AIC, ICC, R2_conditional, R_2 marginal, R_2 cumulative for the null model
-            null_table[(target, name_change_dict[dset])][("Null Model", "AIC")] = null_diag["AIC"].values[0]
-            null_table[(target, name_change_dict[dset])][("Null Model", "ICC")] = null_diag["ICC"].values[0]
-            null_table[(target, name_change_dict[dset])][("Null Model", "R²-cond")] = null_diag["R2_conditional"].values[0]
-            null_table[(target, name_change_dict[dset])][("Null Model", "R²-marg")] = null_diag["R2_marginal"].values[0]
-            null_table[(target, name_change_dict[dset])][("Null Model", "R²-cum")] = null_diag["pseudo_R2"].values[0]
+            null_table[(target, dset_name)][("Null Model", "AIC")] = null_diag["AIC"].values[0]
+            null_table[(target, dset_name)][("Null Model", "ICC")] = null_diag["ICC"].values[0]
+            null_table[(target, dset_name)][("Null Model", "R²-cond")] = null_diag["R2_conditional"].values[0]
+            null_table[(target, dset_name)][("Null Model", "R²-marg")] = null_diag["R2_marginal"].values[0]
+            null_table[(target, dset_name)][("Null Model", "R²-cum")] = null_diag["pseudo_R2"].values[0]
 
     return null_table
 
@@ -172,7 +174,7 @@ def create_pred_diag_table(fe_diag_df, rs_diag_df, comparison_df):
 
                 if len(ri_diag) > 0:
                     pred_name = name_change_dict[pred]
-                    dset_name = name_change_dict[dset]
+                    dset_name = name_change_dict[str(dset)]
                     pred_diag_table[target][(pred_name, dset_name)] = {}
 
                     # get the relevant model comparison data to grab the results of the log likelihood ratio test
@@ -241,7 +243,7 @@ def create_pred_coefficients_table(fe_coefficient_df, fe_std_coefficient_df, rs_
 
                 if len(fe_coeffs) > 0:
                     pred_name = name_change_dict[pred]
-                    dset_name = name_change_dict[dset]
+                    dset_name = name_change_dict[str(dset)]
 
                     # get the standardized fixed effect coefficients for the predictor + dataset combination
                     fe_std_coeffs = fe_std_coefficient_df.loc[(fe_std_coefficient_df["dv"] == target) &
@@ -400,9 +402,9 @@ def create_pred_icc_table(icc_results_df):
 
             if len(icc_row) > 0:
 
-                icc_table[(name_change_dict[target], name_change_dict[dset])] = {}
+                icc_table[(name_change_dict[target], name_change_dict[str(dset)])] = {}
 
-                icc_table[(name_change_dict[target], name_change_dict[dset])]["ICC"] = icc_row["ICC"].iloc[0]
+                icc_table[(name_change_dict[target], name_change_dict[str(dset)])]["ICC"] = icc_row["ICC"].iloc[0]
 
     return icc_table
 
@@ -536,8 +538,6 @@ def describe_null_model(results_table, target):
 
     return
 
-#%%
-
 
 # helper function to print infos about the model comparisons
 def describe_model_comparison(null_diag_table, pred_diag_table, target):
@@ -601,8 +601,6 @@ def describe_model_comparison(null_diag_table, pred_diag_table, target):
 
     return
 
-#%%
-
 
 # simple helper function to describe the model coefficients
 def describe_coefficients(coeff_table, target):
@@ -644,12 +642,252 @@ def describe_coefficients(coeff_table, target):
 
 #%%
 
-# test = describe_model_comparison(task_null_diag_table, task_pred_diag_table, "arousal")
+# -- Now describe the results for all result datasets -- #
 
-test = describe_coefficients(task_pred_coefficient_table, "arousal")
+# ..Mouse Task Analysis.. #
+print("Printing summarized results for the mixed model analysis of the MOUSE TASK data")
+
+#%%
+
+# Get the null model results
+
+describe_null_model(task_null_diag_table, "arousal")
+
+#%%
+
+describe_null_model(task_null_diag_table, "valence")
+
+#%%
+
+# Get the Model Comparison Results
+describe_model_comparison(task_null_diag_table, task_pred_diag_table, "arousal")
+
+#%%
+
+describe_model_comparison(task_null_diag_table, task_pred_diag_table, "valence")
+
+#%%
+
+# Get the Model Coefficient Results
+describe_coefficients(task_pred_coefficient_table, "arousal")
+
+#%%
+
+describe_coefficients(task_pred_coefficient_table, "valence")
+
+#%%
+
+# ..Free Mouse Analysis.. #
+print("Printing summarized results for the mixed model analysis of the FREE MOUSE data")
+
+#%%
+
+# Get the null model results
+
+describe_null_model(free_null_result_table, "arousal")
+
+#%%
+
+describe_null_model(free_null_result_table, "valence")
+
+#%%
+
+# Get the Model Comparison Results
+describe_model_comparison(free_null_result_table, free_pred_diag_table, "arousal")
+
+#%%
+
+describe_model_comparison(free_null_result_table, free_pred_diag_table, "valence")
+
+#%%
+
+# Get the Model Coefficient Results
+describe_coefficients(free_pred_coefficient_table, "arousal")
+
+#%%
+
+describe_coefficients(free_pred_coefficient_table, "valence")
+
+#%%
+
+############################
+# Machine Learning Results #
+############################
+
+# create a new dataframe with the following structure
+
+#                                 Baseline           Full Mod
+#                            ------------------  ---------------
+#           Train/Test Shape |  R² | MSE | MAE   R² | MSE | MAE
+# ----------------------------------------------------------------
+#  Dset1 |
+#  Dset2 |
+#  Dset3 |
+
+
+# helper function to extract the relevant results from the results data set
+def ml_results_table(result_files):
+
+    result_table = {}
+
+    # get the target variables to create separate tables per target
+    targets = ["arousal", "valence"]
+
+    # loop the targets
+    for target in targets:
+        result_table[target] = {}
+        # loop the results
+        for result in result_files:
+            # check the target variable to see if we need the regression or classification results
+            if target in result:
+                # get the dset name
+                dset_name = name_change_dict[result.split('_', 1)[1]]
+                result_table[target][dset_name] = {}
+                # # add the dataset shapes
+                result_table[target][dset_name][("Num. Samples", "Train Data")] = result_files[result]['dset_shapes']['train_shape'][0]
+                result_table[target][dset_name][("Num. Samples", "Test Data")] = result_files[result]['dset_shapes']['test_shape'][0]
+
+                # add the baseline results
+                result_table[target][dset_name][("Null Model", "num preds.")] = len(result_files[result]['predictors']['baseline'])
+                result_table[target][dset_name][("Null Model", "R²-score")] = result_files[result]['baseline_results']['scores']['r2']
+                result_table[target][dset_name][("Null Model", "MSE")] = result_files[result]['baseline_results']['scores']['mse']
+                result_table[target][dset_name][("Null Model", "MAE")] = result_files[result]['baseline_results']['scores']['mae']
+                # add the full model results
+                result_table[target][dset_name][("Full Model", 'num. preds.')] = len(result_files[result]['predictors']['mouse_only'])
+                result_table[target][dset_name][("Full Model", "R²-score")] = result_files[result]['full_model_results']['scores']['r2']
+                result_table[target][dset_name][("Full Model", "MSE")] = result_files[result]['full_model_results']['scores']['mse']
+                result_table[target][dset_name][("Full Model", "MAE")] = result_files[result]['full_model_results']['scores']['mae']
+
+    return result_table
+
+
+# %%
+
+# Mouse Usage Task
+# ----------------
+
+with open('./Mouse-Task_Analysis/Mouse_task_ML_Results.p', 'rb') as handle:
+    task_ml_results = pickle.load(handle)
+
+# %%
+
+task_ml_result_table = ml_results_table(task_ml_results)
+
+# %%
+
+# Free Mouse Usage
+# -----------------
+
+with open("./Free-Mouse_Analysis/Free_Mouse_ML_results.p", "rb") as handle:
+    free_ml_results = pickle.load(handle)
+
+# %%
+
+free_ml_results_table = ml_results_table(free_ml_results)
+
+
+# %%
+
+# helper function to get some descriptive results of the machine learning analysis
+def get_ml_descriptives(ml_results, target):
+    # create the relevant dataframe from the null model results table
+    ml_df = pd.DataFrame.from_dict(ml_results[target], orient='index').rename_axis(["target"])
+
+    # now get simple descriptive stats about selected columns
+    print(f"Average Null Model R²: {ml_df[('Null Model', 'R²-score')].mean()}")
+    print(f"Average Null Model MSE: {ml_df[('Null Model', 'MSE')].mean()}")
+    print(f"Average Null Model MAE: {ml_df[('Null Model', 'MAE')].mean()}")
+    print("\n")
+    print(f"Average Full Model R²: {ml_df[('Full Model', 'R²-score')].mean()}")
+    print(f"Average Full Model MSE: {ml_df[('Full Model', 'MSE')].mean()}")
+    print(f"Average Full Model MAE: {ml_df[('Full Model', 'MAE')].mean()}")
+
+    return
+
+#%%
+
+# Get desc. stats for the mouse task ml analysis results
+
+get_ml_descriptives(task_ml_result_table, "arousal")
+
+#%%
+
+get_ml_descriptives(task_ml_result_table, "valence")
+
+#%%
+
+# Get desc. stats for the free mouse ml analysis results
+
+get_ml_descriptives(free_ml_results_table, "arousal")
+
+# %%
+
+get_ml_descriptives(free_ml_results_table, "valence")
+
+#%%
+
+############################
+# Create Tables per Target #
+############################
+
+# create the result tables and save them as csv files (they will need further manual processing in order to fit the
+# APA format)
+
+
+# helper function to save the output table as csv files, the baseline table and single predictor/interaction table
+# need separate helper functions
+def save_null_baseline_output(table_dict, filename):
+
+    # convert the null model & baseline model dictionary to a dataframe
+    df = pd.DataFrame.from_dict(table_dict, orient='index').rename_axis(["target", "dset"]).round(2)
+    # save it as an excel file
+    df.to_excel(filename + '.xlsx')
+
+
+def save_mixed_model_output(table_dict, filename):
+    # create an excel file with separate sheets that contain the results for each target variable
+    with pd.ExcelWriter(filename + ".xlsx") as writer:
+        # the table dict contains a separate dictionary for each target variable (alternative would be to create one
+        # large multiindex dataframe)
+        for target in table_dict:
+            # convert the target table dict into a dataframe
+            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["pred", "dset"]).round(2)
+            # save the table df as a csv file
+            table_df.to_excel(writer, sheet_name=target)
+
+
+def save_ml_output(table_dict, filename):
+    # create an excel file with separate sheets that contain the results for each target variable
+    with pd.ExcelWriter(filename + ".xlsx") as writer:
+        # the table dict contains a separate dictionary for each target variable
+        for target in table_dict:
+            # convert the target table dict into a dataframe
+            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["dset"]).round(2)
+            # save the table df as a csv file
+            table_df.to_excel(writer, sheet_name=target)
 
 
 #%%
+
+# save the results that should be highlighted in the paper as csv files
+# save_null_baseline_output(task_null_baseline_result_table, "task_null_baseline_res_table")
+# save_mixed_model_output(task_single_pred_results_table, "task_single_pred_res_table")
+# save_mixed_model_output(task_interaction_results_table, "task_interaction_res_table")
+# save_null_baseline_output(free_null_baseline_result_table, "free_null_baseline_res_table")
+# save_mixed_model_output(free_single_pred_results_table, "free_single_pred_res_table")
+# save_mixed_model_output(free_interaction_results_table, "free_interaction_res_table")
+
+# save_ml_output(task_ml_result_table, 'task_ml_res_table')
+# save_ml_output(free_ml_results_table, 'free_ml_res_table')
+
+
+
+#%%
+
+
+############
+# OLD CODE #
+############
 
 # helper function to get the Log Likelihood Significance Value (significant or not significant)
 def _get_loglikelihood_sig(mod_comp_data, position):
@@ -791,218 +1029,3 @@ def describe_results(baseline_results, model_results, target):
 
     # return best ri models and best slope models
     return best_ri_models, best_slope_models
-
-
-#%%
-
-
-
-# get the descriptive stats for the single predictor model and the interaction model, per target variable (arousal,
-# valence, stress) and for the mouse task data and the free-mouse data
-
-# mouse task data
-# ...............
-
-# baseline comparison
-null_baseline_comparison(task_null_baseline_result_table, 'arousal')
-null_baseline_comparison(task_null_baseline_result_table, 'valence')
-
-#%%
-
-# single pred models
-print("Get desc result stats for the mouse task single predictor models and target arousal")
-arousal_intercept, arousal_slope = describe_results(task_null_baseline_result_table, task_single_pred_results_table, 'arousal')
-arousal_intercept_desc, arousal_slope_desc = arousal_intercept.describe(), arousal_slope.describe()
-
-print("\nGet desc result stats for the mouse task single predictor models and target valence")
-valence_intercept, valence_slope = describe_results(task_null_baseline_result_table, task_single_pred_results_table, 'valence')
-valence_intercept_desc, valence_slope_desc = valence_intercept.describe(), valence_slope.describe()
-
-
-#%%
-
-# free mouse data
-# ...............
-
-# baseline comparison
-
-#%%
-
-# single pred models
-
-
-#%%
-
-print("\nGet desc result stats for the free-mouse single predictor models and target valence")
-
-
-#%%
-
-############################
-# Machine Learning Results #
-############################
-
-# create a new dataframe with the following structure
-
-#                               Baseline      Full Mod
-#                            -------------  -----------
-#           Train/Test Shape |  R² | MAE |  | R² | MAE |
-# -------------------------------------------------------
-#  Dset1 |
-#  Dset2 |
-#  Dset3 |
-
-
-# helper function to extract the relevant results from the results data set
-def ml_results_table(result_files):
-    result_table = {}
-
-    # get the target variables to create separate tables per target
-    targets = ["arousal", "valence", "stress"]
-
-    # loop the targets
-    for target in targets:
-        result_table[target] = {}
-        # loop the results
-        for result in result_files:
-            # check the target variable to see if we need the regression or classification results
-            if target in result:
-                # get the dset name
-                dset_name = name_change_dict[result.split('_', 1)[1]]
-                result_table[target][dset_name] = {}
-                # # add the dataset shapes
-                result_table[target][dset_name][("Num. Samples", "Train Data")] = result_files[result]['dset_shapes']['train_shape'][0]
-                result_table[target][dset_name][("Num. Samples", "Test Data")] = result_files[result]['dset_shapes']['test_shape'][0]
-
-                if target != "stress":
-                    # add the baseline results
-                    result_table[target][dset_name][("Baseline Model", "num preds.")] = len(
-                        result_files[result]['predictors']['baseline'])
-                    result_table[target][dset_name][("Baseline Model", "R²-score")] = result_files[result]['baseline_results']['scores']['r2']
-                    result_table[target][dset_name][("Baseline Model", "MAE")] = result_files[result]['baseline_results']['scores']['mae']
-                    # add the full model results
-                    result_table[target][dset_name][("Full Model", 'num. preds.')] = len(
-                        result_files[result]['predictors']['full_model'])
-                    result_table[target][dset_name][("Full Model", "R²-score")] = result_files[result]['full_model_results']['scores']['r2']
-                    result_table[target][dset_name][("Full Model", "MAE")] = result_files[result]['full_model_results']['scores'][
-                        'mae']
-                    # add the mouse only results
-                    result_table[target][dset_name][("Mouse Model", "num preds.")] = len(
-                        result_files[result]['predictors']['mouse_only'])
-                    result_table[target][dset_name][("Mouse Model", "R²-score")] = \
-                        result_files[result]['mouse_only_model_results']['scores']['r2']
-                    result_table[target][dset_name][("Mouse Model", "MAE")] = \
-                        result_files[result]['mouse_only_model_results']['scores']['mae']
-                else:
-                    # add the baseline results
-                    result_table[target][dset_name][("Baseline Model", "num preds.")] = len(
-                        result_files[result]['predictors']['baseline'])
-                    result_table[target][dset_name][("Baseline Model", "Acc")] = result_files[result]['baseline_results']['scores']['acc']
-                    result_table[target][dset_name][("Baseline Model", "bal. Acc")] = result_files[result]['baseline_results']['scores'][
-                        'b_acc']
-                    result_table[target][dset_name][("Baseline Model", "f1")] = result_files[result]['baseline_results']['scores']['f1']
-                    result_table[target][dset_name][("Baseline Model", "conf.Mat.")] = result_files[result]['baseline_results']['scores']['cm']
-                    # add the full model results
-                    result_table[target][dset_name][("Full Model", 'num. preds.')] = len(
-                        result_files[result]['predictors']['full_model'])
-                    result_table[target][dset_name][("Full Model", 'Acc')] = result_files[result]['full_model_results']['scores'][
-                        'acc']
-                    result_table[target][dset_name][("Full Model", 'bal. Acc')] = result_files[result]['full_model_results']['scores'][
-                        'b_acc']
-                    result_table[target][dset_name][("Full Model", 'f1')] = result_files[result]['full_model_results']['scores']['f1']
-                    result_table[target][dset_name][("Full Model", 'conf.Mat.')] = result_files[result]['full_model_results']['scores']['cm']
-                    # add the mouse only results
-                    result_table[target][dset_name][("Mouse Model", "num preds.")] = len(
-                        result_files[result]['predictors']['mouse_only'])
-                    result_table[target][dset_name][("Mouse Model", "Acc")] = \
-                        result_files[result]['mouse_only_model_results']['scores']['acc']
-                    result_table[target][dset_name][("Mouse Model", "bal. Acc")] = \
-                        result_files[result]['mouse_only_model_results']['scores']['b_acc']
-                    result_table[target][dset_name][("Mouse Model", "f1")] = \
-                        result_files[result]['mouse_only_model_results']['scores']['f1']
-                    result_table[target][dset_name][("Mouse Model", "conf.Mat.")] = \
-                        result_files[result]['mouse_only_model_results']['scores']['cm']
-
-    return result_table
-
-
-# %%
-
-# Mouse Usage Task
-# ----------------
-
-with open("Mouse_Task_Results/Machine_Learning/mouse_task_ML_results.json", "r") as f:
-    task_ml_results = json.loads(json.load(f))
-
-# %%
-
-task_ml_result_table = ml_results_table(task_ml_results)
-
-# %%
-
-# Free Mouse Usage
-# -----------------
-
-with open("Free_Mouse_Results/ML_Results/Free_Mouse_ML_results.json", "r") as g:
-    free_ml_results = json.loads(json.load(g))
-
-# %%
-
-free_ml_results_table = ml_results_table(free_ml_results)
-
-
-# %%
-
-############################
-# Create Tables per Target #
-############################
-
-# create the result tables and save them as csv files (they will need further manual processing in order to fit the
-# APA format)
-
-
-# helper function to save the output table as csv files, the baseline table and single predictor/interaction table
-# need separate helper functions
-def save_null_baseline_output(table_dict, filename):
-
-    # convert the null model & baseline model dictionary to a dataframe
-    df = pd.DataFrame.from_dict(table_dict, orient='index').rename_axis(["target", "dset"]).round(2)
-    # save it as an excel file
-    df.to_excel(filename + '.xlsx')
-
-
-def save_mixed_model_output(table_dict, filename):
-    # create an excel file with separate sheets that contain the results for each target variable
-    with pd.ExcelWriter(filename + ".xlsx") as writer:
-        # the table dict contains a separate dictionary for each target variable (alternative would be to create one
-        # large multiindex dataframe)
-        for target in table_dict:
-            # convert the target table dict into a dataframe
-            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["pred", "dset"]).round(2)
-            # save the table df as a csv file
-            table_df.to_excel(writer, sheet_name=target)
-
-
-def save_ml_output(table_dict, filename):
-    # create an excel file with separate sheets that contain the results for each target variable
-    with pd.ExcelWriter(filename + ".xlsx") as writer:
-        # the table dict contains a separate dictionary for each target variable
-        for target in table_dict:
-            # convert the target table dict into a dataframe
-            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["dset"]).round(2)
-            # save the table df as a csv file
-            table_df.to_excel(writer, sheet_name=target)
-
-
-#%%
-
-# save the results that should be highlighted in the paper as csv files
-# save_null_baseline_output(task_null_baseline_result_table, "task_null_baseline_res_table")
-# save_mixed_model_output(task_single_pred_results_table, "task_single_pred_res_table")
-# save_mixed_model_output(task_interaction_results_table, "task_interaction_res_table")
-# save_null_baseline_output(free_null_baseline_result_table, "free_null_baseline_res_table")
-# save_mixed_model_output(free_single_pred_results_table, "free_single_pred_res_table")
-# save_mixed_model_output(free_interaction_results_table, "free_interaction_res_table")
-
-# save_ml_output(task_ml_result_table, 'task_ml_res_table')
-# save_ml_output(free_ml_results_table, 'free_ml_res_table')
