@@ -367,7 +367,7 @@ def create_pred_coefficients_table(fe_coefficient_df, fe_std_coefficient_df, rs_
 
                     # get the p-value
                     pred_coeff_table[target][(pred_name, dset_name, "between-Effect")][
-                        ('Fixed Effect Model', 'p-value')] = rs_between_coeffs["p.value"].values[0]
+                        ('Rand. Slope Model', 'p-value')] = rs_between_coeffs["p.value"].values[0]
 
                     # Standardized Random Slope Model
                     rs_between_std_coeffs = rs_std_coeffs.loc[(rs_std_coeffs["Component"] == "between")]
@@ -836,22 +836,80 @@ get_ml_descriptives(free_ml_results_table, "valence")
 
 # helper function to save the output table as csv files, the baseline table and single predictor/interaction table
 # need separate helper functions
-def save_null_baseline_output(table_dict, filename):
+def save_null_model(table_dict, filename):
 
     # convert the null model & baseline model dictionary to a dataframe
-    df = pd.DataFrame.from_dict(table_dict, orient='index').rename_axis(["target", "dset"]).round(2)
+    df = pd.DataFrame.from_dict(table_dict, orient='index').rename_axis(["target", "dset"]).round(4)
+
     # save it as an excel file
     df.to_excel(filename + '.xlsx')
 
 
-def save_mixed_model_output(table_dict, filename):
+def save_model_coeffs(table_dict, filename):
     # create an excel file with separate sheets that contain the results for each target variable
     with pd.ExcelWriter(filename + ".xlsx") as writer:
         # the table dict contains a separate dictionary for each target variable (alternative would be to create one
         # large multiindex dataframe)
         for target in table_dict:
             # convert the target table dict into a dataframe
-            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["pred", "dset"]).round(2)
+            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["targt", "dset", "pred"]).round(4)
+
+            # change p-values to significance strings
+            conditions0 = [
+                table_df[("Fixed Effect Model", "p-value")] < (0.05 / (len(table_df[("Fixed Effect Model", "p-value")])/2)),
+                table_df[("Fixed Effect Model", "p-value")] < 0.05,
+                table_df[("Fixed Effect Model", "p-value")] >= 0.05
+            ]
+
+            conditions1 = [
+                table_df[("Rand. Slope Model", "p-value")] < (0.05 / (len(table_df[("Rand. Slope Model", "p-value")])/2)),
+                table_df[("Rand. Slope Model", "p-value")] < 0.05,
+                table_df[("Rand. Slope Model", "p-value")] >= 0.05
+            ]
+
+            choices = ["< .05*", "< .05", "n.s."]
+
+            # change p-values of both columns
+            table_df[("Fixed Effect Model", "p-value")] = np.select(conditions0, choices)
+            table_df[("Rand. Slope Model", "p-value")] = np.select(conditions1, choices)
+
+            # save the table df as a csv file
+            table_df.to_excel(writer, sheet_name=target)
+
+
+def save_model_diag(table_dict, filename):
+    # create an excel file with separate sheets that contain the results for each target variable
+    with pd.ExcelWriter(filename + ".xlsx") as writer:
+        # the table dict contains a separate dictionary for each target variable (alternative would be to create one
+        # large multiindex dataframe)
+        for target in table_dict:
+            # convert the target table dict into a dataframe
+            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["pred", "dset"]).round(4)
+            # hacky way to remove R²-marg values if no R²-cond values were calculated
+            table_df[("Rand. Slope Model", "R²-marg")] = table_df[("Rand. Slope Model", "R²-marg")] + table_df[
+                ("Rand. Slope Model", "R²-cond")]
+            table_df[("Rand. Slope Model", "R²-marg")] = table_df[("Rand. Slope Model", "R²-marg")] - table_df[
+                ("Rand. Slope Model", "R²-cond")]
+
+            # change p-values to significance strings
+            conditions0 = [
+                table_df[("Fixed Effect Model", "-2ΔLL")] < (0.05 / len(table_df[("Fixed Effect Model", "-2ΔLL")])),
+                table_df[("Fixed Effect Model", "-2ΔLL")] < 0.05,
+                table_df[("Fixed Effect Model", "-2ΔLL")] >= 0.05
+            ]
+
+            conditions1 = [
+                table_df[("Rand. Slope Model", "-2ΔLL")] < (0.05 / len(table_df[("Rand. Slope Model", "-2ΔLL")])),
+                table_df[("Rand. Slope Model", "-2ΔLL")] < 0.05,
+                table_df[("Rand. Slope Model", "-2ΔLL")] >= 0.05
+            ]
+
+            choices = ["< .05*", "< .05", "n.s."]
+
+            # change p-values of both columns
+            table_df[("Fixed Effect Model", "-2ΔLL")] = np.select(conditions0, choices)
+            table_df[("Rand. Slope Model", "-2ΔLL")] = np.select(conditions1, choices)
+
             # save the table df as a csv file
             table_df.to_excel(writer, sheet_name=target)
 
@@ -870,162 +928,26 @@ def save_ml_output(table_dict, filename):
 #%%
 
 # save the results that should be highlighted in the paper as csv files
-# save_null_baseline_output(task_null_baseline_result_table, "task_null_baseline_res_table")
-# save_mixed_model_output(task_single_pred_results_table, "task_single_pred_res_table")
-# save_mixed_model_output(task_interaction_results_table, "task_interaction_res_table")
-# save_null_baseline_output(free_null_baseline_result_table, "free_null_baseline_res_table")
-# save_mixed_model_output(free_single_pred_results_table, "free_single_pred_res_table")
-# save_mixed_model_output(free_interaction_results_table, "free_interaction_res_table")
+save_null_model(task_null_diag_table, "Task_Null_Models_resTable")
+save_null_model(task_icc_table, "Task_ICC_Models_resTable")
 
-# save_ml_output(task_ml_result_table, 'task_ml_res_table')
-# save_ml_output(free_ml_results_table, 'free_ml_res_table')
-
-
+save_null_model(free_null_result_table, "Free_Null_Models_resTable")
+save_null_model(free_icc_table, "Free_ICC_Models_resTable")
 
 #%%
 
-
-############
-# OLD CODE #
-############
-
-# helper function to get the Log Likelihood Significance Value (significant or not significant)
-def _get_loglikelihood_sig(mod_comp_data, position):
-
-    # extract the p-value
-    p_val = mod_comp_data.at[position, 'p']
-
-    if p_val >= 0.05:
-        return "n.s."
-    else:
-        return " < .05"
+save_model_diag(task_pred_diag_table, "Task_Pred_Diag_resTable")
+save_model_diag(free_pred_diag_table, "Free_Pred_Diag_resTable")
 
 #%%
-def describe_results(baseline_results, model_results, target):
 
-    print(f"Get some descriptive results for target: {target}")
-    # first create dataframes for the baseline results and model results using the specified target
-    baseline_df = pd.DataFrame.from_dict(baseline_results, orient='index').rename_axis(["target", "dset"]).round(2).loc[target, :]
+save_model_coeffs(task_pred_coefficient_table, "Task_Pred_Coeffs_resTable")
+save_model_coeffs(free_pred_coefficient_table, "Free_Pred_Coeffs_resTable")
 
-    model_df = pd.DataFrame.from_dict(model_results[target], orient='index').rename_axis(["pred", "dset"]).round(2)
+#%%
 
-    # merge both datasets
-    merged_df = model_df.join(baseline_df, how="inner")
+save_ml_output(task_ml_result_table, "Task_ML_resTable")
+save_ml_output(free_ml_results_table, "Free_ML_resTable")
 
-    print(f"Total number of models: {len(merged_df)}")
 
-    # create a column that contains the model name of the model with the lowest AIC value = best fit
-    merged_df[("Stats", "AIC_max")] = merged_df.loc[:, merged_df.columns.get_level_values(1) == "AIC"].idxmin(axis=1).str[0]
 
-    # print info about which model was the best
-    best_aic_models = merged_df[('Stats', 'AIC_max')].value_counts()
-    print(f"Best AIC values by models:\n{best_aic_models}")
-    print(f"Percentage of better than baseline models: {(best_aic_models['Rand. Intercept & Slope Model'] + best_aic_models['Rand. Intercept Model'])/ len(merged_df) }")
-    print(f"Percentage of Ran. Intercept Model: {best_aic_models['Rand. Intercept Model'] / (best_aic_models['Rand. Intercept Model'] + best_aic_models['Rand. Intercept & Slope Model'])}")
-
-    # get all best random intercept models
-    best_ri_models = merged_df[merged_df[('Stats', 'AIC_max')] == "Rand. Intercept Model"].loc[:, "Rand. Intercept Model"]
-    # get all best random intercept & slope models
-    best_slope_models = merged_df[merged_df[('Stats', 'AIC_max')].str.contains("Slope")].loc[:, "Rand. Intercept & Slope Model"]
-
-    # get the variables, which have at least one model. which is better than the baseline model
-    sig_ri_vars = list(best_ri_models.index.get_level_values(0).unique())
-    sig_slope_vars = list(best_slope_models.index.get_level_values(0).unique())
-    sig_variables = np.unique(sig_ri_vars + sig_slope_vars)
-    print(f"Sig variables for the random intercept model: {len(sig_ri_vars)}")
-    # print(sig_ri_vars)
-    print(f"Sig variables for the random slope model: {len(sig_slope_vars)}")
-    # print(sig_slope_vars)
-    print(f"Total significant variables: {len(sig_variables)}")
-    # print(f"The variables are: {sig_variables}")
-    print(f"Total number of variables: {len(model_df.index.get_level_values(0).unique())}")
-
-    # get descriptive stats about the model diagnostic criteria and model estimates of the "best" models
-    # first create separate columns for the fixed effect estimates and the confidence interval bounds (was a string var)
-    # random intercept models
-    best_ri_models[["Est.", "Conf.l", "Conf.h"]] = best_ri_models.loc[:, "Fixed Effect Est."].str.split(
-        expand=True).replace(to_replace=r'[]|,|[]', value='', regex=True).apply(pd.to_numeric)
-    # add a column that indicates if the CI contains 0
-    best_ri_models["CI_includes_0"] = (0 >= best_ri_models.loc[:, 'Conf.l']) & (0 <= best_ri_models.loc[:, 'Conf.h'])
-    # random slope models
-    best_slope_models[["Est.", "Conf.l", "Conf.h"]] = best_slope_models.loc[:, "Fixed Effect Est."].str.split(
-        expand=True).replace(to_replace=r'[]|,|[]', value='', regex=True).apply(pd.to_numeric)
-    # add a column that indicates if the CI contains 0
-    best_slope_models["CI_includes_0"] = (0 >= best_slope_models.loc[:, 'Conf.l']) & \
-                                         (0 <= best_slope_models.loc[:, 'Conf.h'])
-
-    print(f"Number of CIs that contain 0 for the random intercept model:\n{best_ri_models['CI_includes_0'].value_counts()}")
-    print(f"Number of CIs that contain 0 for the random slope model:\n{best_slope_models['CI_includes_0'].value_counts()}")
-
-    # stack the best ri_model and the best slope_model and get infos about the range of coefficient estimates
-    stacked = pd.concat([best_ri_models, best_slope_models])
-    print(f"Range of R²-cond: {stacked['R²-cond'].min()}, {stacked['R²-cond'].max()}")
-    print(f"Range of R²-marg: {stacked['R²-marg'].min()}, {stacked['R²-marg'].max()}")
-    print(f"Range of fixed-effect: {stacked['Est.'].min()}, {stacked['Est.'].max()}")
-    print(f"Largest fixed effect for predictor and dataset: {stacked['Est.'].abs().idxmax()}")
-    print(f"Largest fixed effect: {stacked.loc[stacked['Est.'].abs().idxmax(), ['Est.', 'Conf.l', 'Conf.h']]}")
-    print(f"Range of random effect: {stacked['Rand. Effect Est.'].min()}, {stacked['Rand. Effect Est.'].max()}")
-    print(f"Largest random effect for predictor and dataset: {best_slope_models['Rand. Effect Est.'].idxmax()}")
-
-    # compare the model estimates between the different datasets for each dependent variable with multiple datasets
-
-    # helper function to get confidence interval overlaps
-    def _get_ci_overlaps(df):
-        # get the confidence intervals of the fixed effect estimates
-        df[["Est.", "Conf.l", "Conf.h"]] = df.loc[:, "Fixed Effect Est."].str.split(
-            expand=True).replace(to_replace=r'[]|,|[]', value='', regex=True).apply(pd.to_numeric)
-        # following code from:
-        # https://stackoverflow.com/questions/66343650/how-to-efficiently-find-overlapping-intervals
-        l1 = df['Conf.l'].to_numpy()
-        h1 = df['Conf.h'].to_numpy()
-        l2 = l1[:, None]
-        h2 = h1[:, None]
-        # Check for overlap
-        # mask is an n * n matrix indicating if interval i overlaps with interval j
-        mask = (l1 < h2) & (h1 > l2)
-        # If interval i overlaps intervla j then j also overlaps i. We only want to get
-        # one of the two pairs. Hence the `triu` (triangle, upper)
-        # Every interval also overlaps itself and we don't want that either. Hence the k=1
-        overlaps = np.triu(mask, k=1).nonzero()
-
-        return overlaps
-
-    non_overlapping_cis_ri_mod = []
-    non_overlapping_cis_slope_mod = []
-    random_effect_variation = {}
-    # loop all predictors
-    for pred in model_df.index.get_level_values(0).unique():
-        # loc the datasets for the predictor (random intercept model & random slope model)
-        pred_ri_df = model_df.loc[pred, "Rand. Intercept Model"]
-        pred_slope_df = model_df.loc[pred, "Rand. Intercept & Slope Model"]
-        # can only compare the preprocessing datasets if the predictors has more than one
-        if len(pred_ri_df) > 1:
-            # get ci overlaps
-            ri_model_overlaps = _get_ci_overlaps(pred_ri_df)
-            slope_model_overlaps = _get_ci_overlaps(pred_slope_df)
-            # check if the number of overlaps is not equal to the number of all overlap combinations
-            if len(ri_model_overlaps[0]) != sum([i for i in range(len(pred_ri_df))]):
-                non_overlapping_cis_ri_mod.append(pred)
-                print(f"Range of estimates for {pred}: {pred_ri_df['Est.'].min()}, {pred_ri_df['Est.'].max()}")
-            # check the same for the random slope model
-            if len(slope_model_overlaps[0]) != sum([i for i in range(len(pred_ri_df))]):
-                non_overlapping_cis_slope_mod.append(pred)
-                print(f"Range of estimates for {pred}: {pred_slope_df['Est.'].min()}, {pred_slope_df['Est.'].max()}")
-
-            # get the standard deviation of the random effect coefficient estimates between the datasets
-            random_effect_variation[pred] = pred_slope_df['Rand. Effect Est.'].std()
-            # print(pred, pred_slope_df['Rand. Effect Est.'].std())
-
-    print(f"Number of predictors with multiple datasets: {len(random_effect_variation)}")
-    print(f"CI non-overlapping in random intercept model for variables: {non_overlapping_cis_ri_mod}")
-    print(f"CI non-overlapping in random slope model for variables: {non_overlapping_cis_slope_mod}")
-
-    # convert the dict into a df, and get some stats
-    rand_eff_var_df = pd.Series(random_effect_variation).T
-    print(f"Mean random effect variation between datasets: {rand_eff_var_df.mean()}")
-    print(f"Min random effect variation between datasets: {rand_eff_var_df.min()}")
-    print(f"Max random effect variation between datasets: {rand_eff_var_df.max()}")
-    print(f"Max random effect variation between datasets: {rand_eff_var_df.idxmax()}")
-
-    # return best ri models and best slope models
-    return best_ri_models, best_slope_models

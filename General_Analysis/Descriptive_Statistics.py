@@ -128,7 +128,7 @@ def plot_valence_arousal(data, filename):
             fontsize=11)
 
     # plt.show()
-    # plt.savefig(filename + '.png')
+    plt.savefig(filename + '.png')
     plt.show()
 
 
@@ -347,7 +347,7 @@ def multi_kde_plot(data, name):
         fig.delaxes(axes[i])
 
     fig.tight_layout()
-    # plt.savefig('Plots_in_Paper/' + name + '_kde_plot.png')
+    plt.savefig(name + '_kde_plot.png')
     plt.show()
 
 
@@ -395,7 +395,7 @@ def correlation_heatmap(data, fig_size, font_scale, name, add_text=True):
 
     # set a tight layout
     plt.tight_layout()
-    # plt.savefig('Plots_in_Paper/' + name + '_corr_heatmap.png')
+    plt.savefig(name + '_corr_heatmap.png')
     # plot the heatmap
     plt.show()
 
@@ -548,8 +548,9 @@ def plot_habituation_multi_pars(data, target, name):
     # participant
     sns.lmplot(data=selected_data, x="Order", y=target, col="ID", height=3, facet_kws=dict(sharex=False, sharey=False))
 
+    plt.savefig(name + "_" + target + '.png')
     plt.show()
-    # plt.savefig(name + "_" + target + '.png')
+
 
 
 # another simple plot to visualize the relationship between the order (time) and a target variable for a randomly drawn
@@ -571,8 +572,9 @@ def plot_habituation_single_pars(data, target, name):
     # remove the legend
     plt.legend([], [], frameon=False)
 
+    plt.savefig(name + "_" + target + '.png')
     plt.show()
-    # plt.savefig(name + "_" + target + '.png')
+
 
 
 # run individual regression of order (time) on a target variable for each participant to test the (linear) effect of
@@ -617,8 +619,8 @@ def plot_habituation_all_pars(data, target, name):
     # finally, add a vertical line that indicates 0
     plt.vlines(0, 0, len(participant_estimates), linestyles="dashed", colors="black")
 
+    plt.savefig(name + "_" + target + '.png')
     plt.show()
-    # plt.savefig(name + "_" + target + '.png')
 
 
 #%%
@@ -650,7 +652,7 @@ mousetask_data.reset_index(drop=True, inplace=True)
 #%%
 
 # in a first step. get a feeling for the distribution of the raw mouse usage features
-multi_kde_plot(mousetask_data.loc[:, all_mouse_task_features + ["valence", "arousal"]], 'mouse_task')
+multi_kde_plot(mousetask_data.loc[:, all_mouse_task_features + ["valence", "arousal"]], 'mouse_task_all')
 
 # Most kde plots suggest a close to normal distribution for the mouse features, except the task time related features.
 # However, there are 2 cases with extremly long task times, which might heavily skew the plots --> they should
@@ -718,7 +720,7 @@ for n, dset in enumerate(mouse_task_datasets):
     print(f"Descriptive stats about stress:\n{mouse_task_datasets[dset]['stress'].value_counts()}\n")
     print(f"Percentage of stress:\n"
           f"{mouse_task_datasets[dset]['stress'].value_counts()[1] / mouse_task_datasets[dset]['stress'].value_counts()[0] * 100}\n")
-    plot_valence_arousal(mouse_task_datasets[dset], dset)
+    # plot_valence_arousal(mouse_task_datasets[dset], dset)
 
 #%%
 
