@@ -362,7 +362,7 @@ def plot_feature_importance_scores(importance_results, col_names, f_name):
     plt.tight_layout()
 
     # save the figure
-    # plt.savefig(f_name + "_feat_import.png")
+    plt.savefig(f_name + "_feat_import.png")
 
     plt.show()
 
@@ -597,7 +597,7 @@ with open("Free_Mouse_ML_results.json", 'w') as f:
 #%%
 
 # if already calculated, the results can be imported here:
-with open('Free_Mouse_Results/ML_Results/Free_Mouse_ML_results.p', 'rb') as handle:
+with open('Free-Mouse_Analysis/Results_Free-Mouse/Machine_Learning_Analysis/Free_Mouse_ML_results.p', 'rb') as handle:
     ml_analysis_results = pickle.load(handle)
 
 #%%
@@ -619,7 +619,7 @@ for i in ml_analysis_results:
         print("Full Model Results:")
         print(ml_analysis_results[i]["full_model_results"]["scores"])
         plot_feature_importance_scores(ml_analysis_results[i]["full_model_results"]["feat_importance"],
-                                       ml_analysis_results[i]["predictors"]["full_model"], 'full_mod_' + i)
+                                       ml_analysis_results[i]["predictors"]["mouse_only"], 'full_mod_' + i)
         print("\n")
     else:
         print("Stopped manually printing the results")
