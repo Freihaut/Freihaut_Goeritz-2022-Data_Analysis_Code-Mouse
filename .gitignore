@@ -1,2 +1,5 @@
 # ignore the idea files of Pycharm
 *.idea/
+
+# ignore the R history file
+.Rhistory
