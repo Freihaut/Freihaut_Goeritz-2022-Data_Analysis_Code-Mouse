@@ -2,4 +2,4 @@
 *.idea/
 
 # ignore the R history file
-.Rhistory
+*.Rhistory

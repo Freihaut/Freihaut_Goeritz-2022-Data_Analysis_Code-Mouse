@@ -542,23 +542,23 @@ freeMouse_results <- list("FreeMouse_results_ri_coeffs" = dplyr::bind_rows(ri_co
                            "FreeMouse_results_rs_std_coeffs" = dplyr::bind_rows(rs_std_coeff_list),
                            "FreeMouse_results_rs_diag" = dplyr::bind_rows(rs_diag_list),
                            "FreeMouse_results_model_comparison" = dplyr::bind_rows(model_comparison),
-                          "FreeMouse_results_MousePred_ICC" = dplyr::bind_rows(mouse_icc))
+                            "FreeMouse_results_MousePred_ICC" = dplyr::bind_rows(mouse_icc))
 
 # save the results as csv files
 save_model_results(freeMouse_results)
 
 # If already Calculated: Import the results from the CSV files instead of running the loop
 freeMouse_results <- list(
-  "FreeMouse_results_ri_coeffs" = read.csv("Results_NEW/FreeMouse_results_ri_coeffs.csv"),
-  "FreeMouse_results_ri_diag" = read.csv("Results_NEW/FreeMouse_results_ri_diag.csv"),
-  "FreeMouse_results_fe_coeffs" = read.csv("Results_NEW/FreeMouse_results_fe_coeffs.csv"),
-  "FreeMouse_results_fe_std_coeffs" = read.csv("Results_NEW/FreeMouse_results_fe_std_coeffs.csv"),
-  "FreeMouse_results_fe_diag" = read.csv("Results_NEW/FreeMouse_results_fe_diag.csv"),
-  "FreeMouse_results_rs_coeffs" = read.csv("Results_NEW/FreeMouse_results_rs_coeffs.csv"),
-  "FreeMouse_results_rs_std_coeffs" = read.csv("Results_NEW/FreeMouse_results_rs_std_coeffs.csv"),
-  "FreeMouse_results_rs_diag" = read.csv("Results_NEW/FreeMouse_results_rs_diag.csv"),
-  "FreeMouse_results_model_comparison" = read.csv("Results_NEW/FreeMouse_results_model_comparison.csv"),
-  "FreeMouse_results_MousePred_ICC" = read.csv("Results_NEW/FreeMouse_results_model_comparison.csv")
+  "FreeMouse_results_ri_coeffs" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_ri_coeffs.csv"),
+  "FreeMouse_results_ri_diag" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_ri_diag.csv"),
+  "FreeMouse_results_fe_coeffs" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_fe_coeffs.csv"),
+  "FreeMouse_results_fe_std_coeffs" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_fe_std_coeffs.csv"),
+  "FreeMouse_results_fe_diag" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_fe_diag.csv"),
+  "FreeMouse_results_rs_coeffs" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_rs_coeffs.csv"),
+  "FreeMouse_results_rs_std_coeffs" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_rs_std_coeffs.csv"),
+  "FreeMouse_results_rs_diag" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_rs_diag.csv"),
+  "FreeMouse_results_model_comparison" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_model_comparison.csv"),
+  "FreeMouse_results_MousePred_ICC" = read.csv("Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_MousePred_ICC.csv")
 )
 
 
@@ -566,63 +566,91 @@ freeMouse_results <- list(
 ### Visualize the Results ###
 #############################
 
+
 # A side-by-side plot of the fixed effect coefficients with their confidence intervals per predictor per dataset
 # for the random intercept model and the random intercept + random slope model plus the standard deviation of the
 # random effects for the random slope + random intercept model
 plot_coefficient_estimates <- function (fe_coeff_data, re_coeff_data, title, dot_size=1) {
-
+  
   # split the random intercept + slope data into the fixed effect estimates and the random effect estimates
   # the first dataset of the list contains the fixed effect estimates, the second, the random effect estimates
   split_re_coeffs <- re_coeff_data %>% group_split(effect)
-
+  
+  re_coeff <- split_re_coeffs[[1]] %>% mutate(eff = rep(c("wtn", "btw"), times=(nrow(split_re_coeffs[[1]]) / 2)))
+  
   # random intercept only fixed effect coefficient plot
-  random_intercept_fixed_eff_plot <- ggplot(fe_coeff_data, aes(x=estimate, y=term, color=dframe, group=dframe)) +
+  random_intercept_fixed_eff_plot <- ggplot(fe_coeff_data, aes(x=estimate, y=eff, color=as.factor(dframe), group=as.factor(dframe))) +
     # plot a vline at 0
     geom_vline(xintercept = 0, colour = "black", linetype = 2, size=1) +
     # plot the fixed effect coefficients with their CIs
     geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position=position_dodge(width = 0.6), size=dot_size) +
     # plot separator lines between the predictors
-    geom_hline(yintercept = seq_along(unique(fe_coeff_data$term)) +0.5, colour = "grey60", linetype = "twodash") +
+    geom_hline(yintercept = 2 * seq_along(unique(fe_coeff_data$iv)) + 0.5, colour = "grey60", linetype = "twodash") +
+    # separate the within and between predictors
+    facet_grid(iv~., scales = "free", space = "free_y", switch = "y") +
     # customize the x- and y-label
-    xlab("Rand. Intercept Model: Fixed Effect Coeffs with 95% CI") +
+    xlab("Fixed Effect Model: Fixed Effect Coeffs with 95% CI") +
     ylab("Predictors") +
     theme_minimal() +
-    theme(text = element_text(size = 14)) +
-    # disable the legend
-    theme(legend.position="none")
-
+    theme(strip.placement = "outside",
+          panel.spacing = unit(0, "in"),
+          strip.background.y = element_rect(fill = "white", color = "white"),
+          strip.text.y.left = element_text(angle = 0),
+          legend.position="none",
+          text = element_text(size = 14))
+  # theme(text = element_text(size = 14)) +
+  # disable the legend
+  # theme(legend.position="none")
+  
   # random intercept plus random slope fixed effect coefficient plot
-  random_intercept_slope_fixed_eff_plot <- ggplot(split_re_coeffs[[1]], aes(x=estimate, y=term, color=dframe, group=dframe)) +
+  random_intercept_slope_fixed_eff_plot <- ggplot(re_coeff, aes(x=estimate, y=eff, color=as.factor(dframe), group=as.factor(dframe))) +
     # plot a vline at 0
     geom_vline(xintercept = 0, colour = "black", linetype = 2, size=1) +
     # plot the fixed effect coefficients with their CIs
     geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position=position_dodge(width = 0.6), size=dot_size) +
     # plot separator lines between the predictors
-    geom_hline(yintercept = seq_along(unique(split_re_coeffs[[1]]$term)) +0.5, colour = "grey60", linetype = "twodash") +
+    geom_hline(yintercept = 2 * seq_along(unique(split_re_coeffs[[1]]$iv)) + 0.5, colour = "grey60", linetype = "twodash") +
+    facet_grid(iv~., scales = "free", space = "free_y", switch = "y") +
     # customize the x- and y-label
-    xlab("Rand. Intercept & Slope Model: Fixed Effect Coeffs with 95% CI") +
+    xlab("Rand. Slope Model: Fixed Effect Coeffs with 95% CI") +
     ylab("") +
     theme_minimal() +
-    # hide the y-axis
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), text = element_text(size = 14)) +
-    # disable the legend
-    theme(legend.position="none")
-
+    theme(strip.placement = "outside",
+          panel.spacing = unit(0, "in"),
+          strip.background.y = element_blank(),
+          strip.text.y = element_blank(),
+          legend.position="none",
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          text = element_text(size = 14))
+  # hide the y-axis
+  # theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), text = element_text(size = 14)) +
+  # disable the legend
+  # theme(legend.position="none")
+  
   # random effects of the slopes plot of the random intercept + slope model
-  random_intercept_slope_random_plot <- ggplot(split_re_coeffs[[2]], aes(x=estimate, y=term, color=dframe, group=dframe)) +
+  random_intercept_slope_random_plot <- ggplot(split_re_coeffs[[2]], aes(x=estimate, y=term, color=as.factor(dframe), group=as.factor(dframe))) +
     # plot a vline at 0
     geom_vline(xintercept = 0, colour = "black", linetype = 2, size=1) +
     # plot the random effect coefficients
     geom_point(position=position_dodge(width = 0.6), size=dot_size*3) +
     # plot separator lines between the predictors
-    geom_hline(yintercept = seq_along(unique(split_re_coeffs[[2]]$term)) +0.5, colour = "grey60", linetype = "twodash") +
+    geom_hline(yintercept = seq_along(unique(split_re_coeffs[[2]]$term)) + 0.5, colour = "grey60", linetype = "twodash") +
+    facet_grid(iv~., scales = "free", space = "free_y", switch = "y") +
     # customize the labels and the legend text
-    labs(x="Random Effect Standard Deviations", y="", color="Datasets") +
-    scale_color_hue(labels = c("dur<5min & z-Par", "2.5*IQR & z-Par", "3.5*IQR & z-Par", "dur<5min & z-Samp", "2.5*IQR & z-Samp", "3.5*IQR & z-Samp")) +
+    labs(x="Within Predictor Random Effect Standard Deviations", y="", color="Datasets") +
+    scale_color_hue(labels = c("Pause Thresh 1s", "Pause Thresh 2s", "Pause Thresh 3s")) +
     theme_minimal() +
     # hide the y-axis
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), text = element_text(size = 14), legend.text = element_text(size = 14))
-
+    theme(strip.placement = "outside",
+          panel.spacing = unit(0, "in"),
+          strip.background.y = element_blank(),
+          strip.text.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          text = element_text(size = 14),
+          legend.text = element_text(size = 14))
+  
   # merge the plots together
   merged_plot <- arrangeGrob(random_intercept_fixed_eff_plot,
                              random_intercept_slope_fixed_eff_plot,
@@ -630,26 +658,29 @@ plot_coefficient_estimates <- function (fe_coeff_data, re_coeff_data, title, dot
                              ncol = 3, widths = c(1, 0.75, 1),
                              top = textGrob(str_replace_all(title, "_", " "))
   )
-
+  
   # save the plot
-  ggsave(paste0(title,".png"), merged_plot, width = 22, height = 12)
-
+  # use different figure sizes depending on what plot needs to be saved
+  # for the single predictor result plots, use a width of 20 and height of 12
+  # for the interaction result plots, use a width of 24 and a height of 14
+  ggsave(paste0(title,".png"), merged_plot, width = 20, height = 12)
+  
   dev.off()
-
+  
 }
 
 
 # Save a plot for every dependent variable of the single predictor model results visualization
 for (target in dvs) {
   # get the (cleaned) coefficient data for the random intercept only model
-  fe_coeffs <- single_pred_results[["Free_Mouse_results_sp_fe_coeffs"]] %>%
+  fe_coeffs <- freeMouse_results[["FreeMouse_results_fe_coeffs"]] %>%
     # filter the relevant dv data
     filter(dv == target) %>%
     # filter out all effects that are not plotted (only the fixed effects are plotted
-    filter(.data = ., !grepl('(Intercept)|timestamp|zoom|screen_width|screen_height|sd_(Intercept)|sd__Observation', term)) %>%
+    filter(.data = ., !grepl('(Intercept)|sd_(Intercept)|sd__Observation', term)) %>%
     # rename the term values to better variable name values
     # BAD CODING: Renaming should have happened in an earlier step!
-    mutate(term = recode(term,  "recording_duration"='Recording Duration',
+    mutate(iv = recode(iv,  "recording_duration"='Recording Duration',
                          "mo_ep_mean_episode_duration"='Move Ep. (mean): Episode Duration',
                          "mo_ep_mean_total_dist"='Move Ep. (mean): Tot. Distance',
                          "mo_ep_mean_speed_mean"='Move Ep. (mean): Speed (mean)',
@@ -666,40 +697,53 @@ for (target in dvs) {
                          "mo_ep_mean_speed_sd"='Move Ep. (mean): Speed (sd)',
                          "mo_ep_sd_total_dist"='Move Ep. (sd): Tot. Distance',
                          "mo_ep_mean_y_flips"='Move Ep. (mean): Y-Flips',
-                         "lockscreen_episodes."='Num. of Lockscreen Eps.'
-    ))
+                         "lockscreen_episodes."='Num. of Lockscreen Eps.',
+                       'mo_ep_mean_abs_jerk_sd' = 'Move Ep. (mean):Jerk (sd)',
+                       'mo_ep_sd_abs_jerk_sd' = 'Move Ep. (sd): Jerk (sd)',
+                       'mo_ep_sd_episode_duration' = 'Move Ep. (sd): Ep. Duration',
+                       'mo_ep_sd_x_flips' = 'Move Ep. (sd): X-Flips',
+                       'mo_ep_sd_y_flips' = 'Move Ep. (sd): Y-Flips',
+                       'movement_distance' = 'Tot. Movement Distance'
+    )) %>%
+    mutate(eff = rep(c("wtn", "btw"), times=(n() / 2)))
 
   # get the (cleaned) coefficient data for the random intercept + slope model
-  re_coeffs <- single_pred_results[["Free_Mouse_results_sp_re_coeffs"]] %>%
+  re_coeffs <- freeMouse_results[["FreeMouse_results_rs_coeffs"]] %>%
     # filter the relevant dv data
     filter(dv == target) %>%
     # filter out all effects that are not plotted
-    filter(.data = ., !grepl('(Intercept)|timestamp|zoom|screen_width|screen_height|sd_(Intercept)|sd__Observation', term)) %>%
+    filter(.data = ., !grepl('(Intercept)|sd_(Intercept)|sd__Observation', term)) %>%
     # remove the sd__ string from the random effect coefficient names in order to rename it in the next step
     mutate(term = str_replace(term, 'sd__', '')) %>%
     # rename the term values to better variable name values
     # BAD CODING: Renaming should have happened in an earlier step!
-    mutate(term = recode(term,  "recording_duration"='Recording Duration',
-                         "mo_ep_mean_episode_duration"='Move Ep. (mean): Episode Duration',
-                         "mo_ep_mean_total_dist"='Move Ep. (mean): Tot. Distance',
-                         "mo_ep_mean_speed_mean"='Move Ep. (mean): Speed (mean)',
-                         "mo_ep_sd_speed_mean"='Move Ep. (sd): Speed (mean)',
-                         "mo_ep_mean_angle_mean"='Move Ep. (mean): Angle (mean)',
-                         "mo_ep_sd_angle_sd"='Move Ep. (sd): Angle (sd)',
-                         "mo_ep_mean_x_flips"='Move Ep. (mean): X-Flips',
-                         "no_movement"='No Movement',
-                         "lockscreen_time"='Lockscreen Time',
-                         "movement_episodes"='Num. of Move Ep.',
-                         "mo_ep_sd_abs_jerk_mean"='Move Ep. (sd): Jerk (mean)',
-                         "mo_ep_sd_angle_mean"='Move Ep. (sd): Angle (mean)',
-                         "mo_ep_mean_angle_sd"='Move Ep. (mean): Angle (sd)',
-                         "mo_ep_mean_speed_sd"='Move Ep. (mean): Speed (sd)',
-                         "mo_ep_sd_total_dist"='Move Ep. (sd): Tot. Distance',
-                         "mo_ep_mean_y_flips"='Move Ep. (mean): Y-Flips',
-                         "lockscreen_episodes."='Num. of Lockscreen Eps.'
+    mutate(iv = recode(iv,  "recording_duration"='Recording Duration',
+                       "mo_ep_mean_episode_duration"='Move Ep. (mean): Episode Duration',
+                       "mo_ep_mean_total_dist"='Move Ep. (mean): Tot. Distance',
+                       "mo_ep_mean_speed_mean"='Move Ep. (mean): Speed (mean)',
+                       "mo_ep_sd_speed_mean"='Move Ep. (sd): Speed (mean)',
+                       "mo_ep_mean_angle_mean"='Move Ep. (mean): Angle (mean)',
+                       "mo_ep_sd_angle_sd"='Move Ep. (sd): Angle (sd)',
+                       "mo_ep_mean_x_flips"='Move Ep. (mean): X-Flips',
+                       "no_movement"='No Movement',
+                       "lockscreen_time"='Lockscreen Time',
+                       "movement_episodes"='Num. of Move Ep.',
+                       "mo_ep_sd_abs_jerk_mean"='Move Ep. (sd): Jerk (mean)',
+                       "mo_ep_sd_angle_mean"='Move Ep. (sd): Angle (mean)',
+                       "mo_ep_mean_angle_sd"='Move Ep. (mean): Angle (sd)',
+                       "mo_ep_mean_speed_sd"='Move Ep. (mean): Speed (sd)',
+                       "mo_ep_sd_total_dist"='Move Ep. (sd): Tot. Distance',
+                       "mo_ep_mean_y_flips"='Move Ep. (mean): Y-Flips',
+                       "lockscreen_episodes."='Num. of Lockscreen Eps.',
+                       'mo_ep_mean_abs_jerk_sd' = 'Move Ep. (mean):Jerk (sd)',
+                       'mo_ep_sd_abs_jerk_sd' = 'Move Ep. (sd): Jerk (sd)',
+                       'mo_ep_sd_episode_duration' = 'Move Ep. (sd): Ep. Duration',
+                       'mo_ep_sd_x_flips' = 'Move Ep. (sd): X-Flips',
+                       'mo_ep_sd_y_flips' = 'Move Ep. (sd): Y-Flips',
+                       'movement_distance' = 'Tot. Movement Distance'
     ))
   # feed the datasets into the visualization function
-  plot_coefficient_estimates(fe_coeffs, re_coeffs, paste0("Free_Mouse_single_predictor_estimates_for_target_", target),
+  plot_coefficient_estimates(fe_coeffs, re_coeffs, paste0("Free_Mouse_coeff_estimates_target_", target),
                              dot_size = .75)
 
 }

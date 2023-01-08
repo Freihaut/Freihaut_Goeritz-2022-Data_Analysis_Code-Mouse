@@ -636,16 +636,16 @@ save_model_results(mouse_task_results)
 
 # If already Calculated: Import the results from the CSV files instead of running the loop
 mouse_task_results <- list(
-  "Task_results_ri_coeffs" = read.csv("Results_NEW/task_results_ri_coeffs.csv"),
-  "Task_results_ri_diag" = read.csv("Results_NEW/task_results_ri_diag.csv"),
-  "Task_results_fe_coeffs" = read.csv("Results_NEW/task_results_fe_coeffs.csv"),
-  "Task_results_fe_std_coeffs" = read.csv("Results_NEW/task_results_fe_std_coeffs.csv"),
-  "Task_results_fe_diag" = read.csv("Results_NEW/task_results_fe_diag.csv"),
-  "Task_results_rs_coeffs" = read.csv("Results_NEW/task_results_rs_coeffs.csv"),
-  "Task_results_rs_std_coeffs" = read.csv("Results_NEW/task_results_rs_std_coeffs.csv"),
-  "Task_results_rs_diag" = read.csv("Results_NEW/task_results_rs_diag.csv"),
-  "Task_results_model_comparison" = read.csv("Results_NEW/task_results_model_comparison.csv"),
-  "Task_results_MousePred_ICC" = read.csv("Results_NEW/Task_results_MousePred_ICC")
+  "Task_results_ri_coeffs" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis/task_results_ri_coeffs.csv"),
+  "Task_results_ri_diag" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_ri_diag.csv"),
+  "Task_results_fe_coeffs" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_fe_coeffs.csv"),
+  "Task_results_fe_std_coeffs" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_fe_std_coeffs.csv"),
+  "Task_results_fe_diag" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_fe_diag.csv"),
+  "Task_results_rs_coeffs" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_rs_coeffs.csv"),
+  "Task_results_rs_std_coeffs" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_rs_std_coeffs.csv"),
+  "Task_results_rs_diag" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_rs_diag.csv"),
+  "Task_results_model_comparison" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//task_results_model_comparison.csv"),
+  "Task_results_MousePred_ICC" = read.csv("Results_Mouse_Task_Analysis/Mixed-Model_Analysis//Task_results_MousePred_ICC.csv")
 )
 
 
@@ -733,9 +733,9 @@ write.csv(compare_with_test_std, "Within_Between_STD_Pred.csv", row.names=FALSE)
 #############################
 
 
-# Implement at the top to give the dataset nicer variable names?
+# --- Testing --- 
 
-test <- single_pred_results[["Task_results_sp_re_coeffs"]] %>%
+test <- mouse_task_results[["Task_results_rs_coeffs"]] %>%
   # filter the relevant dv data
   filter(dv == 'arousal') %>%
   # filter out all effects that are not plotted
@@ -743,7 +743,8 @@ test <- single_pred_results[["Task_results_sp_re_coeffs"]] %>%
   # remove the sd__ string from the random effect coefficient names
   mutate(term = str_replace(term, 'sd__', '')) %>%
   # rename the term values to better variable name values (tideous work which probably should have done in an earlier step
-  mutate(term = recode(term, "clicks" = 'Clicks',
+  mutate(iv = recode(iv, 
+                       "clicks" = 'Clicks',
                        "task_total_dist" = "Task: Tot. Distance",
                        "task_angle_sd" = 'Task: Angle (sd)',
                        "task_x_flips" = 'Task: X-Flips',
@@ -769,11 +770,37 @@ test <- single_pred_results[["Task_results_sp_re_coeffs"]] %>%
                        "trial_sd_abs_jerk_mean" = 'Trial (sd): Jerk (mean)',
                        "task_duration" = 'Task: Duration',
                        "task_abs_jerk_sd" = 'Task: Jerk (sd)',
-                       "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)')) %>%
+                       "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)'
+                       )) %>%
   group_split(effect)
 
+test1 <- test[[1]] %>% mutate(test = rep(c("wtn", "btw"), times=(nrow(test1) / 2)))
+nrow(test1)
 
-# TODO: HOW TO CREATE THE PLOTS WITH DOUBLE THE VARIABLES? (ONLY WITHIN?)
+
+ggplot(test1, aes(x=estimate, y=test, color=dframe, group=dframe)) +
+  # plot a vline at 0
+  geom_vline(xintercept = 0, colour = "black", linetype = 2, size=1) +
+  # plot the fixed effect coefficients with their CIs
+  geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position=position_dodge(width = 0.6), size=1) +
+  # plot separator lines between the predictors
+  geom_hline(yintercept = 2 * seq_along(unique(test[[1]]$iv)) + 0.5, colour = "grey60", linetype = "twodash") +
+  facet_grid(iv~., scales = "free", space = "free_y", switch = "y") +
+  xlab("Fixed Effect Model: Fixed Effect Coeffs with 95% CI") +
+  ylab("Predictors") +
+  theme(strip.placement = "outside",
+        panel.spacing = unit(0, "in"),
+        strip.background.y = element_rect(fill = "white", color = "white"),
+        strip.text.y.left = element_text(angle = 0))
+  # customize the x- and y-label
+  theme_minimal() +
+  # theme(text = element_text(size = 12)) +
+  # disable the legend
+  theme(legend.position="none")
+
+  
+  
+# --- Real Plots ----
 
 # A side-by-side plot of the fixed effect coefficients with their confidence intervals per predictor per dataset
 # for the random intercept model and the random intercept + random slope model plus the standard deviation of the
@@ -783,54 +810,81 @@ plot_coefficient_estimates <- function (fe_coeff_data, re_coeff_data, title, dot
   # split the random intercept + slope data into the fixed effect estimates and the random effect estimates
   # the first dataset of the list contains the fixed effect estimates, the second, the random effect estimates
   split_re_coeffs <- re_coeff_data %>% group_split(effect)
+  
+  re_coeff <- split_re_coeffs[[1]] %>% mutate(eff = rep(c("wtn", "btw"), times=(nrow(split_re_coeffs[[1]]) / 2)))
 
   # random intercept only fixed effect coefficient plot
-  random_intercept_fixed_eff_plot <- ggplot(fe_coeff_data, aes(x=estimate, y=term, color=dframe, group=dframe)) +
+  random_intercept_fixed_eff_plot <- ggplot(fe_coeff_data, aes(x=estimate, y=eff, color=dframe, group=dframe)) +
     # plot a vline at 0
     geom_vline(xintercept = 0, colour = "black", linetype = 2, size=1) +
     # plot the fixed effect coefficients with their CIs
     geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position=position_dodge(width = 0.6), size=dot_size) +
     # plot separator lines between the predictors
-    geom_hline(yintercept = seq_along(unique(fe_coeff_data$term)) +0.5, colour = "grey60", linetype = "twodash") +
+    geom_hline(yintercept = 2 * seq_along(unique(fe_coeff_data$iv)) + 0.5, colour = "grey60", linetype = "twodash") +
+    # separate the within and between predictors
+    facet_grid(iv~., scales = "free", space = "free_y", switch = "y") +
     # customize the x- and y-label
-    xlab("Rand. Intercept Model: Fixed Effect Coeffs with 95% CI") +
+    xlab("Fixed Effect Model: Fixed Effect Coeffs with 95% CI") +
     ylab("Predictors") +
     theme_minimal() +
-    theme(text = element_text(size = 14)) +
+    theme(strip.placement = "outside",
+          panel.spacing = unit(0, "in"),
+          strip.background.y = element_rect(fill = "white", color = "white"),
+          strip.text.y.left = element_text(angle = 0),
+          legend.position="none",
+          text = element_text(size = 14))
+    # theme(text = element_text(size = 14)) +
     # disable the legend
-    theme(legend.position="none")
+    # theme(legend.position="none")
 
   # random intercept plus random slope fixed effect coefficient plot
-  random_intercept_slope_fixed_eff_plot <- ggplot(split_re_coeffs[[1]], aes(x=estimate, y=term, color=dframe, group=dframe)) +
+  random_intercept_slope_fixed_eff_plot <- ggplot(re_coeff, aes(x=estimate, y=eff, color=dframe, group=dframe)) +
     # plot a vline at 0
     geom_vline(xintercept = 0, colour = "black", linetype = 2, size=1) +
     # plot the fixed effect coefficients with their CIs
     geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position=position_dodge(width = 0.6), size=dot_size) +
     # plot separator lines between the predictors
-    geom_hline(yintercept = seq_along(unique(split_re_coeffs[[1]]$term)) +0.5, colour = "grey60", linetype = "twodash") +
+    geom_hline(yintercept = 2 * seq_along(unique(split_re_coeffs[[1]]$iv)) + 0.5, colour = "grey60", linetype = "twodash") +
+    facet_grid(iv~., scales = "free", space = "free_y", switch = "y") +
     # customize the x- and y-label
-    xlab("Rand. Intercept & Slope Model: Fixed Effect Coeffs with 95% CI") +
+    xlab("Rand. Slope Model: Fixed Effect Coeffs with 95% CI") +
     ylab("") +
     theme_minimal() +
+    theme(strip.placement = "outside",
+          panel.spacing = unit(0, "in"),
+          strip.background.y = element_blank(),
+          strip.text.y = element_blank(),
+          legend.position="none",
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          text = element_text(size = 14))
     # hide the y-axis
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), text = element_text(size = 14)) +
+    # theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), text = element_text(size = 14)) +
     # disable the legend
-    theme(legend.position="none")
+    # theme(legend.position="none")
 
   # random effects of the slopes plot of the random intercept + slope model
-  random_intercept_slope_random_plot <- ggplot(split_re_coeffs[[2]], aes(x=estimate, y=term, color=dframe, group=dframe)) +
+  random_intercept_slope_random_plot <- ggplot(split_re_coeffs[[2]], aes(x=estimate, y=term, color=as.factor(dframe), group=as.factor(dframe))) +
     # plot a vline at 0
     geom_vline(xintercept = 0, colour = "black", linetype = 2, size=1) +
     # plot the random effect coefficients
     geom_point(position=position_dodge(width = 0.6), size=dot_size*3) +
     # plot separator lines between the predictors
-    geom_hline(yintercept = seq_along(unique(split_re_coeffs[[2]]$term)) +0.5, colour = "grey60", linetype = "twodash") +
+    geom_hline(yintercept = seq_along(unique(split_re_coeffs[[2]]$term)) + 0.5, colour = "grey60", linetype = "twodash") +
+    facet_grid(iv~., scales = "free", space = "free_y", switch = "y") +
     # customize the labels and the legend text
-    labs(x="Random Effect Standard Deviations", y="", color="Datasets") +
-    scale_color_hue(labels = c("dur<5min & z-Par", "2.5*IQR & z-Par", "3.5*IQR & z-Par", "dur<5min & z-Samp", "2.5*IQR & z-Samp", "3.5*IQR & z-Samp")) +
+    labs(x="Within Predictor Random Effect Standard Deviations", y="", color="Datasets") +
+    scale_color_hue(labels = c("dur<5min", "2.5*IQR", "3.5*IQR")) +
     theme_minimal() +
     # hide the y-axis
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), text = element_text(size = 14), legend.text = element_text(size = 14))
+    theme(strip.placement = "outside",
+          panel.spacing = unit(0, "in"),
+          strip.background.y = element_blank(),
+          strip.text.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          text = element_text(size = 14),
+          legend.text = element_text(size = 14))
 
   # merge the plots together
   merged_plot <- arrangeGrob(random_intercept_fixed_eff_plot,
@@ -854,13 +908,14 @@ plot_coefficient_estimates <- function (fe_coeff_data, re_coeff_data, title, dot
 # Save a plot for every dependent variable
 for (target in dvs) {
   # get the (cleaned) coefficient data for the random intercept only model
-  fe_coeffs <- single_pred_results[["Task_results_sp_fe_coeffs"]] %>%
+  fe_coeffs <- mouse_task_results[["Task_results_fe_coeffs"]] %>%
     # filter the relevant dv data
     filter(dv == target) %>%
     # filter out all effects that are not plotted (only the fixed effects are plotted
-    filter(.data = ., !grepl('(Intercept)|timestamp|zoom|screen_width|screen_height|median_sampling_freq|sd_(Intercept)|sd__Observation', term)) %>%
+    filter(.data = ., !grepl('(Intercept)|sd_(Intercept)|sd__Observation', term)) %>%
     # rename the term values to better variable name values (tideous work which probably should have done in an earlier step
-    mutate(term = recode(term, "clicks" = 'Clicks',
+    mutate(iv = recode(iv, 
+                         "clicks" = 'Clicks',
                          "task_total_dist" = "Task: Tot. Distance",
                          "task_angle_sd" = 'Task: Angle (sd)',
                          "task_x_flips" = 'Task: X-Flips',
@@ -886,51 +941,52 @@ for (target in dvs) {
                          "trial_sd_abs_jerk_mean" = 'Trial (sd): Jerk (mean)',
                          "task_duration" = 'Task: Duration',
                          "task_abs_jerk_sd" = 'Task: Jerk (sd)',
-                         "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)'))
+                         "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)')) %>%
+    mutate(eff = rep(c("wtn", "btw"), times=(n() / 2)))
 
   # get the (cleaned) coefficient data for the random intercept + slope model
-  re_coeffs <- single_pred_results[["Task_results_sp_re_coeffs"]] %>%
+  re_coeffs <- mouse_task_results[["Task_results_rs_coeffs"]] %>%
     # filter the relevant dv data
     filter(dv == target) %>%
     # filter out all effects that are not plotted
-    filter(.data = ., !grepl('(Intercept)|timestamp|zoom|screen_width|screen_height|median_sampling_freq|sd_(Intercept)|sd__Observation', term)) %>%
+    filter(.data = ., !grepl('(Intercept)|sd_(Intercept)|sd__Observation', term)) %>%
     # remove the sd__ string from the random effect coefficient names in order to rename it in the next step
     mutate(term = str_replace(term, 'sd__', '')) %>%
     # rename the term values to better variable name values (tideous work which probably should have done in an earlier step
-    mutate(term = recode(term, "clicks" = 'Clicks',
-                         "task_total_dist" = "Task: Tot. Distance",
-                         "task_angle_sd" = 'Task: Angle (sd)',
-                         "task_x_flips" = 'Task: X-Flips',
-                         "task_y_flips" = 'Task: Y-Flips',
-                         "trial_sd_duration" = 'Trial (sd): Duration',
-                         "trial_mean_trial_move_offset" = 'Trial (mean): Initiation Time',
-                         "trial_sd_trial_move_offset" = 'Trial (sd): Initiation Time',
-                         "trial_sd_total_dist" = 'Trial (sd): Tot. Distance',
-                         "trial_sd_distance_overshoot" = 'Trial (sd): Ideal Line Deviation',
-                         "trial_mean_speed_mean" = 'Trial (mean): Speed (mean)',
-                         "trial_sd_speed_mean" = 'Trial (sd): Speed (mean)',
-                         "trial_mean_speed_sd" = 'Trial (mean): Speed (sd)',
-                         "trial_sd_speed_sd" = 'Trial (sd): Speed (sd)',
-                         "trial_sd_abs_jerk_sd" = 'Trial (sd): Jerk (sd)',
-                         "trial_mean_angle_mean" = 'Trial (mean): Angle (mean)',
-                         "trial_sd_angle_mean" = 'Trial (sd): Angle (mean)',
-                         "trial_mean_angle_sd" = 'Trial (mean): Angle (sd)',
-                         "trial_sd_angle_sd" = 'Trial (sd): Angle (sd)',
-                         "trial_sd_x_flips" = 'Trial (sd): X-Flips',
-                         "trial_sd_y_flips" = 'Trial (sd): Y-Flips',
-                         "trial_mean_duration" = 'Trial (mean): Duration',
-                         "trial_mean_total_dist" = 'Trial (mean): Tot. Distance',
-                         "trial_sd_abs_jerk_mean" = 'Trial (sd): Jerk (mean)',
-                         "task_duration" = 'Task: Duration',
-                         "task_abs_jerk_sd" = 'Task: Jerk (sd)',
-                         "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)'))
+    mutate(iv = recode(iv, 
+                       "clicks" = 'Clicks',
+                       "task_total_dist" = "Task: Tot. Distance",
+                       "task_angle_sd" = 'Task: Angle (sd)',
+                       "task_x_flips" = 'Task: X-Flips',
+                       "task_y_flips" = 'Task: Y-Flips',
+                       "trial_sd_duration" = 'Trial (sd): Duration',
+                       "trial_mean_trial_move_offset" = 'Trial (mean): Initiation Time',
+                       "trial_sd_trial_move_offset" = 'Trial (sd): Initiation Time',
+                       "trial_sd_total_dist" = 'Trial (sd): Tot. Distance',
+                       "trial_sd_distance_overshoot" = 'Trial (sd): Ideal Line Deviation',
+                       "trial_mean_speed_mean" = 'Trial (mean): Speed (mean)',
+                       "trial_sd_speed_mean" = 'Trial (sd): Speed (mean)',
+                       "trial_mean_speed_sd" = 'Trial (mean): Speed (sd)',
+                       "trial_sd_speed_sd" = 'Trial (sd): Speed (sd)',
+                       "trial_sd_abs_jerk_sd" = 'Trial (sd): Jerk (sd)',
+                       "trial_mean_angle_mean" = 'Trial (mean): Angle (mean)',
+                       "trial_sd_angle_mean" = 'Trial (sd): Angle (mean)',
+                       "trial_mean_angle_sd" = 'Trial (mean): Angle (sd)',
+                       "trial_sd_angle_sd" = 'Trial (sd): Angle (sd)',
+                       "trial_sd_x_flips" = 'Trial (sd): X-Flips',
+                       "trial_sd_y_flips" = 'Trial (sd): Y-Flips',
+                       "trial_mean_duration" = 'Trial (mean): Duration',
+                       "trial_mean_total_dist" = 'Trial (mean): Tot. Distance',
+                       "trial_sd_abs_jerk_mean" = 'Trial (sd): Jerk (mean)',
+                       "task_duration" = 'Task: Duration',
+                       "task_abs_jerk_sd" = 'Task: Jerk (sd)',
+                       "trial_mean_abs_jerk_mean" = 'Trial (mean): Jerk (mean)'))
 
   # feed the datasets into the visualization function
-  plot_coefficient_estimates(fe_coeffs, re_coeffs, paste0("Task_single_predictor_estimates_for_target_", target),
+  plot_coefficient_estimates(fe_coeffs, re_coeffs, paste0("Task_coeff_estimates_target_", target),
                              dot_size = .75)
 
 }
-
 
 ############################################
 ### Additional Control Variable Analysis ###

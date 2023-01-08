@@ -419,7 +419,7 @@ def create_pred_icc_table(icc_results_df):
 # ---------------------------------------
 
 # import the datasets
-task_null_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_ri_diag.csv")
+task_null_diag = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_ri_diag.csv")
 
 #%%
 
@@ -432,15 +432,15 @@ task_null_diag_table = create_null_model_table(task_null_diag)
 # ------------------------------
 
 # import all results from the csv file (there are 5 result files)
-task_pred_fe_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_fe_coeffs.csv")
-task_pred_fe_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_fe_diag.csv")
-task_pred_fe_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_fe_std_coeffs.csv")
+task_pred_fe_coeffs = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_fe_coeffs.csv")
+task_pred_fe_diag = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_fe_diag.csv")
+task_pred_fe_std_coeffs = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_fe_std_coeffs.csv")
 
-task_pred_rs_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_rs_coeffs.csv")
-task_pred_rs_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_rs_diag.csv")
-task_pred_rs_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_rs_std_coeffs.csv")
+task_pred_rs_coeffs = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_rs_coeffs.csv")
+task_pred_rs_diag = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_rs_diag.csv")
+task_pred_rs_std_coeffs = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_rs_std_coeffs.csv")
 
-task_pred_model_comp = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_model_comparison.csv")
+task_pred_model_comp = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_model_comparison.csv")
 
 #%%
 
@@ -458,7 +458,7 @@ task_pred_coefficient_table = create_pred_coefficients_table(task_pred_fe_coeffs
 # get the ICC table for all mouse usage features (part of the descriptive stats)
 
 # import the ICC dataset
-task_icc_df = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Results_NEW/Task_results_MousePred_ICC.csv")
+task_icc_df = pd.read_csv("Mouse-Task_Analysis/Results_Mouse_Task_Analysis/Mixed-Model_Analysis/Task_results_MousePred_ICC.csv")
 task_icc_table = create_pred_icc_table(task_icc_df)
 
 
@@ -472,7 +472,7 @@ task_icc_table = create_pred_icc_table(task_icc_df)
 # ---------------------------------------
 
 # import the datasets
-free_null_mod_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_ri_diag.csv")
+free_null_mod_diag = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_ri_diag.csv")
 
 #%%
 
@@ -486,15 +486,15 @@ free_null_result_table = create_null_model_table(free_null_mod_diag)
 
 # import all results from the csv file (there are 5 result files)
 # import all results from the csv file (there are 5 result files)
-free_pred_fe_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_fe_coeffs.csv")
-free_pred_fe_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_fe_diag.csv")
-free_pred_fe_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_fe_std_coeffs.csv")
+free_pred_fe_coeffs = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_fe_coeffs.csv")
+free_pred_fe_diag = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_fe_diag.csv")
+free_pred_fe_std_coeffs = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_fe_std_coeffs.csv")
 
-free_pred_rs_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_rs_coeffs.csv")
-free_pred_rs_diag = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_rs_diag.csv")
-free_pred_rs_std_coeffs = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_rs_std_coeffs.csv")
+free_pred_rs_coeffs = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_rs_coeffs.csv")
+free_pred_rs_diag = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_rs_diag.csv")
+free_pred_rs_std_coeffs = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_rs_std_coeffs.csv")
 
-free_pred_model_comp = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_model_comparison.csv")
+free_pred_model_comp = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_model_comparison.csv")
 
 #%%
 
@@ -512,7 +512,7 @@ free_pred_coefficient_table = create_pred_coefficients_table(free_pred_fe_coeffs
 # get the ICC table for all mouse usage features (part of the descriptive stats)
 
 # import the ICC dataset
-free_icc_df = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Results_NEW/FreeMouse_results_MousePred_ICC.csv")
+free_icc_df = pd.read_csv("Free-Mouse_Analysis/Results_Free-Mouse/Mixed-Model_Analysis/FreeMouse_results_MousePred_ICC.csv")
 free_icc_table = create_pred_icc_table(free_icc_df)
 
 
