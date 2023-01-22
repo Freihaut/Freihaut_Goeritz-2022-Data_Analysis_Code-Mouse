@@ -15,3 +15,4 @@ calculation procedure to the feature calculation procedure used in the present s
 - Dataset of the longitudinal mouse study by Banholzer et al. (2021). You can find the research paper [here](https://doi.org/10.2196/27121) and the
 a link to their repository with data analysis code and the dataset [here](https://doi.org/10.17605/OSF.IO/HE3F2) [Data_Banholzer_et_al.csv]
 - The results of the machine learning analysis [Banholzer_ML_Analysis_results.p]
+- A dataset that contains sociodemographic infos about the dataset for the descriptive stats analysis
