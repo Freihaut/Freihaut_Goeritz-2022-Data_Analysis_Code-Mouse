@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6577586.svg)](https://doi.org/10.5281/zenodo.6577586)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7576822.svg)](https://doi.org/10.5281/zenodo.7576822)
 
 ## Study Data Analysis Code: Exploring the relationship between emotional states and computer mouse usage
 
