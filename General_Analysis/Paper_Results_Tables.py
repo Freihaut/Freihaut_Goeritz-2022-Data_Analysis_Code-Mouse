@@ -10,6 +10,7 @@ For questions regarding the code, please contact: paul.freihaut@psychologie.uni-
 import pandas as pd
 import numpy as np
 import pickle
+from statsmodels.stats.multitest import multipletests
 
 #%%
 
@@ -526,6 +527,13 @@ free_icc_table = create_pred_icc_table(free_icc_df)
 
 # - Coefficient estimates, their p-values and confidence intervals
 
+# helper function to conduct a false discovery rate alpha correction for multiple testing
+# Using the Benjamini-Hochburg Procedure as implemented in the statsmodels package
+def false_discovery_correction(p_value_df):
+
+    return multipletests(p_value_df.values, method="fdr_bh")[0]
+
+
 # simple helper function to print descriptive stats about the ICC across the datasets for a specified target variable
 def describe_null_model(results_table, target):
 
@@ -563,15 +571,15 @@ def describe_model_comparison(null_diag_table, pred_diag_table, target):
     # count the number of significant loglikelihood ratio tests between the null model and the fixed effect model
     print("Num. of significant Log Likelihood Tests between the fixed effect model and the null model")
     print(len(merged_df.loc[merged_df[("Fixed Effect Model", "-2ΔLL")] < 0.05]))
-    print("After Bonferroni correction")
-    print(len(merged_df.loc[merged_df[("Fixed Effect Model", "-2ΔLL")] < (0.05 / len(merged_df))]))
+    print("After False Discrovery Rate Alpha Correction: ")
+    print(np.sum(false_discovery_correction(merged_df[("Fixed Effect Model", "-2ΔLL")])))
     print("\n")
 
     # count the number of significant loglikelhood ratio tests between the random slope model and the fixed effect model
     print("Num. of significant Log Likelihood Tests between the random slope model and the fixed effect model")
     print(len(merged_df.loc[merged_df[("Rand. Slope Model", "-2ΔLL")] < 0.05]))
-    print("After Bonferroni correction")
-    print(len(merged_df.loc[merged_df[("Rand. Slope Model", "-2ΔLL")] < (0.05 / len(merged_df))]))
+    print("After False Discrovery Rate Alpha Correction: ")
+    print(np.sum(false_discovery_correction(merged_df[("Rand. Slope Model", "-2ΔLL")])))
     print("\n")
 
     # calculate the R²-value differences between the models
@@ -614,32 +622,33 @@ def describe_coefficients(coeff_table, target):
     # count the number of significant between effects
     print(f"Number of significant between effects in the fixed effect model: "
           f"{len(between_coeffs.loc[between_coeffs[('Fixed Effect Model', 'p-value')] < 0.05])}")
-    print(f"After Bonferroni Correction: "
-          f"{len(between_coeffs.loc[between_coeffs[('Fixed Effect Model', 'p-value')] < (0.05/len(between_coeffs))])}")
+    print(f"After False Discrovery Rate Alpha Correction: "
+          f"{np.sum(false_discovery_correction(between_coeffs[('Fixed Effect Model', 'p-value')]))}")
 
     print(f"Number of significant between effects in the random slope model: "
           f"{len(between_coeffs.loc[between_coeffs[('Rand. Slope Model', 'p-value')] < 0.05])}")
-    print(f"After Bonferroni Correction: "
-          f"{len(between_coeffs.loc[between_coeffs[('Rand. Slope Model', 'p-value')] < (0.05 / len(between_coeffs))])}")
+    print(f"After False Discrovery Rate Alpha Correction: "
+         f"{np.sum(false_discovery_correction(between_coeffs[('Rand. Slope Model', 'p-value')]))}")
 
     # do the same with the within-effects
     within_coeffs = coeff_df.xs("within-Effect", axis=0, level=2, drop_level=False)
     # count the number of significant between effects
     print(f"Number of significant within effects in the fixed effect model: "
           f"{len(within_coeffs.loc[within_coeffs[('Fixed Effect Model', 'p-value')] < 0.05])}")
-    print(f"After Bonferroni Correction: "
-          f"{len(within_coeffs.loc[within_coeffs[('Fixed Effect Model', 'p-value')] < (0.05 / len(within_coeffs))])}")
+    print(f"After False Discrovery Rate Alpha Correction: "
+          f"{np.sum(false_discovery_correction(within_coeffs[('Fixed Effect Model', 'p-value')]))}")
 
     print(f"Number of significant within effects in the random slope model: "
           f"{len(within_coeffs.loc[within_coeffs[('Rand. Slope Model', 'p-value')] < 0.05])}")
-    print(f"After Bonferroni Correction: "
-          f"{len(within_coeffs.loc[within_coeffs[('Rand. Slope Model', 'p-value')] < (0.05 / len(within_coeffs))])}")
+    print(f"After False Discrovery Rate Alpha Correction: "
+          f"{np.sum(false_discovery_correction(within_coeffs[('Rand. Slope Model', 'p-value')]))}")
 
     # finally, get the range of the random slope of the within-effect
     print("Descriptive Stats about the random slope effect")
     print(within_coeffs[('Rand. Slope Model', 'Rand. Effect Est.')].describe())
 
     return
+
 
 #%%
 
@@ -853,17 +862,35 @@ def save_model_coeffs(table_dict, filename):
         # large multiindex dataframe)
         for target in table_dict:
             # convert the target table dict into a dataframe
-            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["targt", "dset", "pred"]).round(4)
+            table_df = pd.DataFrame.from_dict(table_dict[target], orient='index').rename_axis(["target", "dset", "pred"]).round(4)
+
+            # add another column into the dataframe that is a boolean value which indicates if the p-value is significant after
+            # false-discovery rate correction using the Benjamini-Hochburg procedure
+
+            # do it separately for the within-effect and the between effect
+            # fixed effect model
+            fe_p_values_within = table_df.loc[(slice(None), slice(None), 'within-Effect'), ('Fixed Effect Model', 'p-value')]
+            table_df.loc[(slice(None), slice(None), 'within-Effect'), ('Fixed Effect Model', 'fe_fdr_corr_sig')] = false_discovery_correction(fe_p_values_within)
+            
+            fe_p_values_between = table_df.loc[(slice(None), slice(None), 'between-Effect'), ('Fixed Effect Model', 'p-value')]
+            table_df.loc[(slice(None), slice(None), 'between-Effect'), ('Fixed Effect Model', 'fe_fdr_corr_sig')] = false_discovery_correction(fe_p_values_between)
+
+            # random slope model
+            rs_p_values_within = table_df.loc[(slice(None), slice(None), 'within-Effect'), ('Rand. Slope Model', 'p-value')]
+            table_df.loc[(slice(None), slice(None), 'within-Effect'), ('Rand. Slope Model', 'rs_fdr_corr_sig')] = false_discovery_correction(rs_p_values_within)
+            
+            rs_p_values_between = table_df.loc[(slice(None), slice(None), 'between-Effect'), ('Rand. Slope Model', 'p-value')]
+            table_df.loc[(slice(None), slice(None), 'between-Effect'), ('Rand. Slope Model', 'rs_fdr_corr_sig')] = false_discovery_correction(rs_p_values_between)
 
             # change p-values to significance strings
             conditions0 = [
-                table_df[("Fixed Effect Model", "p-value")] < (0.05 / (len(table_df[("Fixed Effect Model", "p-value")])/2)),
+                table_df[("Fixed Effect Model", "fe_fdr_corr_sig")] == True,
                 table_df[("Fixed Effect Model", "p-value")] < 0.05,
                 table_df[("Fixed Effect Model", "p-value")] >= 0.05
             ]
 
             conditions1 = [
-                table_df[("Rand. Slope Model", "p-value")] < (0.05 / (len(table_df[("Rand. Slope Model", "p-value")])/2)),
+                table_df[("Rand. Slope Model", "rs_fdr_corr_sig")] == True,
                 table_df[("Rand. Slope Model", "p-value")] < 0.05,
                 table_df[("Rand. Slope Model", "p-value")] >= 0.05
             ]
@@ -873,6 +900,10 @@ def save_model_coeffs(table_dict, filename):
             # change p-values of both columns
             table_df[("Fixed Effect Model", "p-value")] = np.select(conditions0, choices)
             table_df[("Rand. Slope Model", "p-value")] = np.select(conditions1, choices)
+
+            # drop the false discovery rate columns again, because they dont appear in the final excel sheet
+            table_df.drop(('Fixed Effect Model', 'fe_fdr_corr_sig'), axis=1, inplace=True)
+            table_df.drop(('Rand. Slope Model', 'rs_fdr_corr_sig'), axis=1, inplace=True)
 
             # save the table df as a csv file
             table_df.to_excel(writer, sheet_name=target)
@@ -891,16 +922,27 @@ def save_model_diag(table_dict, filename):
                 ("Rand. Slope Model", "R²-cond")]
             table_df[("Rand. Slope Model", "R²-marg")] = table_df[("Rand. Slope Model", "R²-marg")] - table_df[
                 ("Rand. Slope Model", "R²-cond")]
+            
+            # similar to the coefficients, we want to check if the p-value is significant after controlling for false-discovery rate
+            # Fixed Effect Model
+
+            fe_corr_p_values = table_df[('Fixed Effect Model', '-2ΔLL')]
+            table_df[('Fixed Effect Model', 'fe_fdr_corr_sig')] = false_discovery_correction(fe_corr_p_values)
+            
+            # Random Slope Model
+            rs_corr_p_values = table_df[('Rand. Slope Model', "-2ΔLL")]
+            table_df[('Rand. Slope Model', 'rs_fdr_corr_sig')] = false_discovery_correction(rs_corr_p_values)
+
 
             # change p-values to significance strings
             conditions0 = [
-                table_df[("Fixed Effect Model", "-2ΔLL")] < (0.05 / len(table_df[("Fixed Effect Model", "-2ΔLL")])),
+                table_df[("Fixed Effect Model", "fe_fdr_corr_sig")] == True,
                 table_df[("Fixed Effect Model", "-2ΔLL")] < 0.05,
                 table_df[("Fixed Effect Model", "-2ΔLL")] >= 0.05
             ]
 
             conditions1 = [
-                table_df[("Rand. Slope Model", "-2ΔLL")] < (0.05 / len(table_df[("Rand. Slope Model", "-2ΔLL")])),
+                table_df[("Rand. Slope Model", "rs_fdr_corr_sig")] == True,
                 table_df[("Rand. Slope Model", "-2ΔLL")] < 0.05,
                 table_df[("Rand. Slope Model", "-2ΔLL")] >= 0.05
             ]
@@ -910,6 +952,10 @@ def save_model_diag(table_dict, filename):
             # change p-values of both columns
             table_df[("Fixed Effect Model", "-2ΔLL")] = np.select(conditions0, choices)
             table_df[("Rand. Slope Model", "-2ΔLL")] = np.select(conditions1, choices)
+
+             # drop the false discovery rate columns again, because they dont appear in the final excel sheet
+            table_df.drop(('Fixed Effect Model', 'fe_fdr_corr_sig'), axis=1, inplace=True)
+            table_df.drop(('Rand. Slope Model', 'rs_fdr_corr_sig'), axis=1, inplace=True)
 
             # save the table df as a csv file
             table_df.to_excel(writer, sheet_name=target)

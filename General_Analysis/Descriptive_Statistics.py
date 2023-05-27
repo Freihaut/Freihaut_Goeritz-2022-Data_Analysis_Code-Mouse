@@ -6,7 +6,7 @@ can be run separately from another (similar to a jupyter notebook)
 For questions regarding the code, please contact: paul.freihaut@psychologie.uni-freiburg.de
 '''
 
-
+#%%
 # package imports
 import gzip
 import json
@@ -25,7 +25,7 @@ from scipy.stats import norm
 # dataset imports
 
 # sociodemographic data of all participants
-with gzip.open("General_Analysis/sociodem_dataset.json.gz", "rb") as f:
+with gzip.open("C:/Users/Paul/Desktop/Data_Analysis/General_Analysis/sociodem_dataset.json.gz", "rb") as f:
      sociodem_data = json.loads(f.read())
 
 # convert the dictionary into a pandas dataframe
@@ -180,6 +180,13 @@ print(f"Descriptive stats about arousal in the mouse task sample:\n{mousetask_da
 # 0 = No-stress, 1 = stress
 print(f"Descriptive stats about stress in the mouse task sample:\n{mousetask_data['stress'].value_counts()}")
 # plot the valence/arousal distribution
+
+# get descriptive stats about the valence and arousal distribution per participant
+print(f"Descriptive stats about valence per participant in the mouse task sample:\n{mousetask_data.groupby('ID')['valence'].describe()}\n")
+print(f"Average standard deviation in valence per participant: {mousetask_data.groupby('ID')['valence'].std().mean()}\n")
+print(f"Descriptive stats about arousal per participant in the mouse task sample:\n{mousetask_data.groupby('ID')['arousal'].describe()}\n")
+print(f"Average standard deviation in arousal per participant: {mousetask_data.groupby('ID')['arousal'].std().mean()}")
+
 plot_valence_arousal(mousetask_data, 'task_valence_arousal_plot')
 
 #%%
@@ -209,6 +216,13 @@ print(f"Descriptive stats about valence in the free mouse usage dataset:\n{free_
 print(f"Descriptive stats about arousal in the free mouse usage dataset:\n{free_mouse_data['arousal'].describe()}\n")
 # 0 = No-stress, 1 = stress
 print(f"Descriptive stats about stress in the free mouse usage dataset:\n{free_mouse_data['stress'].value_counts()}")
+
+# get descriptive stats about the valence and arousal distribution per participant
+print(f"Descriptive stats about valence per participant in the free mouse usage dataset:\n{free_mouse_data.groupby('ID')['valence'].describe()}\n")
+print(f"Average standard deviation in valence per participant: {free_mouse_data.groupby('ID')['valence'].std().mean()}\n")
+print(f"Descriptive stats about arousal per participant in the free mouse usage dataset:\n{free_mouse_data.groupby('ID')['arousal'].describe()}\n")
+print(f"Average standard deviation in arousal per participant: {free_mouse_data.groupby('ID')['arousal'].std().mean()}")
+
 # plot the valence/arousal distribution
 plot_valence_arousal(free_mouse_data, 'free_mouse_valence_arousal_plot')
 
