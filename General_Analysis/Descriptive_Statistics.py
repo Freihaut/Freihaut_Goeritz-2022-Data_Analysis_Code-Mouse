@@ -146,6 +146,34 @@ sample_descriptive(sociodem_data)
 
 #%%
 
+# Descriptive Stats about Valence and Arousal Across both, the mouse task dataset and the free-mouse dataset
+# merge both datasets into one
+
+# create subsets of the mouse datasets only containing valence, arousal and the dset id
+mouse_data_subset = mousetask_data[['dset_ID', 'arousal', 'valence', 'ID']]
+free_data_subset = free_mouse_data[['dset_ID', 'arousal', 'valence', 'ID']]
+
+# merge the data subsets to create a dataset that contains all "valid" arousal and valence data that was used in the study
+merged_val_arousal_dset = pd.merge(mouse_data_subset, free_data_subset, on='dset_ID', how='outer')
+merged_val_arousal_dset['arousal'] = merged_val_arousal_dset['arousal_x'].combine_first(merged_val_arousal_dset['arousal_y'])
+merged_val_arousal_dset['valence'] = merged_val_arousal_dset['valence_x'].combine_first(merged_val_arousal_dset['valence_y'])
+merged_val_arousal_dset['ID'] = merged_val_arousal_dset['ID_x'].combine_first(merged_val_arousal_dset['ID_y'])
+
+# Get descriptive stats about valence, arousal & stress in the mouse task dataset
+print(f"Descriptive stats about valence:\n{merged_val_arousal_dset['valence'].describe()}\n")
+print(f"Descriptive stats about arousal:\n{merged_val_arousal_dset['arousal'].describe()}\n")
+
+# get descriptive stats about the valence and arousal distribution per participant
+print(f"Descriptive stats about valence per participant:\n{merged_val_arousal_dset.groupby('ID')['valence'].describe()}\n")
+print(f"Average standard deviation in valence per participant: {merged_val_arousal_dset.groupby('ID')['valence'].std().mean()}\n")
+print(f"Descriptive stats about arousal per participant:\n{merged_val_arousal_dset.groupby('ID')['arousal'].describe()}\n")
+print(f"Average standard deviation in arousal per participant: {merged_val_arousal_dset.groupby('ID')['arousal'].std().mean()}")
+
+# plot valence and arousal
+plot_valence_arousal(merged_val_arousal_dset, 'task_valence_arousal_plot')
+
+#%%
+
 # Info about the mouse task dataset
 # ---------------------------------
 
@@ -179,7 +207,6 @@ print(f"Descriptive stats about valence in the mouse task sample:\n{mousetask_da
 print(f"Descriptive stats about arousal in the mouse task sample:\n{mousetask_data['arousal'].describe()}\n")
 # 0 = No-stress, 1 = stress
 print(f"Descriptive stats about stress in the mouse task sample:\n{mousetask_data['stress'].value_counts()}")
-# plot the valence/arousal distribution
 
 # get descriptive stats about the valence and arousal distribution per participant
 print(f"Descriptive stats about valence per participant in the mouse task sample:\n{mousetask_data.groupby('ID')['valence'].describe()}\n")
@@ -187,6 +214,7 @@ print(f"Average standard deviation in valence per participant: {mousetask_data.g
 print(f"Descriptive stats about arousal per participant in the mouse task sample:\n{mousetask_data.groupby('ID')['arousal'].describe()}\n")
 print(f"Average standard deviation in arousal per participant: {mousetask_data.groupby('ID')['arousal'].std().mean()}")
 
+# plot it
 plot_valence_arousal(mousetask_data, 'task_valence_arousal_plot')
 
 #%%
