@@ -743,6 +743,7 @@ for opt in outlier_options:
     # now remove highly correlated features to reduce the redundancies in the dataset
     redundant_features = find_corr_vars(dset.loc[:, all_mouse_task_features], cutoff=0.8)
     print(f"Number of removed collinear features: {len(redundant_features)}")
+    print(f"Number of remaining mouse features: {len(all_mouse_task_features) - len(redundant_features)}")
     dset = dset.drop(redundant_features, axis=1)
 
     # save the dataset in the list
@@ -905,6 +906,7 @@ for thresh in pause_threshs:
     # remove highly correlated mouse features from the dataset
     redundant_features = find_corr_vars(dset.loc[:, free_mouse_feats], cutoff=0.8)
     print(f"Number of removed collinear features: {len(redundant_features)}")
+    print(f"Number of remaining mouse features: {len(free_mouse_feats) - len(redundant_features)}")
     dset = dset.drop(redundant_features, axis=1)
 
     # add the dataset to the dataset list
