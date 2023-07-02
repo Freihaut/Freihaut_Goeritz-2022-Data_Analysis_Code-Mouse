@@ -547,6 +547,13 @@ def describe_null_model(results_table, target):
 
     return
 
+# Helper function to print R² information across datasets
+def print_R2_info(data, effect, r2_value):
+    print(f"{effect}, {r2_value}")
+    print(data[(effect, r2_value)].groupby(level='dset').mean())
+    print(data[(effect, r2_value)].groupby(level='dset').max())
+    print("\n")
+
 
 # helper function to print infos about the model comparisons
 def describe_model_comparison(null_diag_table, pred_diag_table, target):
@@ -607,6 +614,15 @@ def describe_model_comparison(null_diag_table, pred_diag_table, target):
     print("\n")
     print(merged_df[("Comp", "S-F_R2_cum")].describe())
     print("\n")
+
+    # Lastly, print some information about the average and max R²-values across each dataset
+    print_R2_info(merged_df, "Fixed Effect Model", "R²-cond")
+    print_R2_info(merged_df, "Fixed Effect Model", "R²-marg")
+    print_R2_info(merged_df, "Fixed Effect Model", "R²-cum")
+
+    print_R2_info(merged_df, "Rand. Slope Model", "R²-cond")
+    print_R2_info(merged_df, "Rand. Slope Model", "R²-marg")
+    print_R2_info(merged_df, "Rand. Slope Model", "R²-cum")
 
     return
 
