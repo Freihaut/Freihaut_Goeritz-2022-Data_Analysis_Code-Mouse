@@ -25,17 +25,17 @@ from scipy.stats import norm
 # dataset imports
 
 # sociodemographic data of all participants
-with gzip.open("C:/Users/Paul/Desktop/Data_Analysis/General_Analysis/sociodem_dataset.json.gz", "rb") as f:
+with gzip.open("C:/Users/freih/Desktop/Freihaut_Goeritz-2022-Data_Analysis_Code-Mouse/General_Analysis/sociodem_dataset.json.gz", "rb") as f:
      sociodem_data = json.loads(f.read())
 
 # convert the dictionary into a pandas dataframe
 sociodem_data = pd.DataFrame(sociodem_data).T
 
 # mousetask data (cleaned)
-mousetask_data = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Mouse-Task_Analysis/Mouse_Task_Features.csv")
+mousetask_data = pd.read_csv("C:/Users/freih/Desktop/Freihaut_Goeritz-2022-Data_Analysis_Code-Mouse/Mouse-Task_Analysis/Mouse_Task_Features.csv")
 
 # import the processed free mouse usage features
-free_mouse_data = pd.read_csv("C:/Users/Paul/Desktop/Data_Analysis/Free-Mouse_Analysis/Free_Mouse_Features.csv")
+free_mouse_data = pd.read_csv("C:/Users/freih/Desktop/Freihaut_Goeritz-2022-Data_Analysis_Code-Mouse/Free-Mouse_Analysis/Free_Mouse_Features.csv")
 
 
 #%%
@@ -52,32 +52,32 @@ def sample_descriptive(sample):
 
     # age (1 = younger than 30, 2 = 30-39, 3 = 40-49, 4 = 50-59, 5 = 60 or older, -99 = missing)
     print(f"Age Distribution of the sample")
-    for age, size in sample["age"].value_counts().iteritems():
+    for age, size in sample["age"].value_counts().items():
         print(f"{size} participants in age group {age}")
 
     print("\n")
     # sex (0 = female, 1 = male, 2 = other, -99 = missing)
     print(f"Gender Distribution of the sample")
-    for gend, size in sample["sex"].value_counts().iteritems():
+    for gend, size in sample["sex"].value_counts().items():
         print(f"{size} participants of sex {gend}")
 
     print("\n")
     # hand that is used to control the computer mouse (0 = right, 1 = left)
     print(f"Mouse Usage Hand Distribution of the sample")
-    for hand, size in sample["hand"].value_counts().iteritems():
+    for hand, size in sample["hand"].value_counts().items():
         print(f"{size} participants use hand {hand} to navigate the computer mouse")
 
     print("\n")
     # os distribution (na values are filled with windows, because in an older version of the app, only mac os was
     # logged as the operating system)
     print(f"OS Distribution")
-    for os, size in sample["os"].replace(to_replace='na', value='win32').value_counts().iteritems():
+    for os, size in sample["os"].replace(to_replace='na', value='win32').value_counts().items():
         print(f"{size} participants use os: {os}")
 
     print("\n")
     # sample distribution (recruited via the convenience sample versus via WisoPanel)
     print(f"Recruitment Distribution")
-    for samp, size in sample["sample"].value_counts().iteritems():
+    for samp, size in sample["sample"].value_counts().items():
         print(f"{size} participants recruited via: {samp}")
 
     print("\n")
@@ -86,7 +86,7 @@ def sample_descriptive(sample):
     # (1.0 = convenience sample first wave, 1.1 = convencience sample second wave, Panel_Pilot = Panel first wave,
     # Panel Fup = Panel second wave, Econd = financial participation renumeration in Euros
     print(f"Recruitment Details")
-    for rec_det, size in sample["appVersion"].value_counts().iteritems():
+    for rec_det, size in sample["appVersion"].value_counts().items():
         print(f"{size} used Study-App Version: {rec_det}")
 
 
@@ -96,21 +96,26 @@ def plot_valence_arousal(data, filename):
     # only show the upper and left spine
     custom_params = {"axes.spines.right": False, "axes.spines.top": False}
     sns.set_theme(style="ticks", rc=custom_params)
-    # draw a scatterplot of the relationship between valence and arousal
-    val_arousal_plot = sns.scatterplot(data=data, x='valence', y='arousal', s=7)
+
+    # draw a scatterplot of the data
+    val_arousal_plot = sns.scatterplot(data=data, x='valence', y='arousal', s=7, alpha=0.75)
+    # draw a KDE plot on top of the data to visualize the densitiy of the distribution
+    # the scatterplot doesnt show overlapping values
+    val_arousal_plot = sns.kdeplot(data=data, x='valence', y='arousal', fill=True, alpha=0.6)
+
     # add vertical and horizontal line
     val_arousal_plot.axhline(50, ls='--', color='black', alpha=0.6)
     val_arousal_plot.axvline(50, ls='--', color='black', alpha=0.6)
     # add custom x and y ticks
     val_arousal_plot.set(xticks=np.arange(0, 101, 50), yticks=np.arange(0, 101, 50))
     # add custom text to the axis
-    ax.text(-0.05, 0.25, 'calm',
+    ax.text(-0.05, 0.25, 'excited',
             horizontalalignment='center',
             verticalalignment='center',
             rotation='vertical',
             transform=ax.transAxes,
             fontsize=11)
-    ax.text(-0.05, 0.75, 'excited',
+    ax.text(-0.05, 0.75, 'calm',
             horizontalalignment='center',
             verticalalignment='center',
             rotation='vertical',
@@ -142,6 +147,20 @@ print("Dem infos about the entire dataset/all participants and trials\n")
 sample_descriptive(sociodem_data)
 # Info about the Number of Datasets are calculated in the mouse_Task_feature_calculation file, because duplicated
 # datasets needed to be removed, which requires the raw data
+
+#%%
+
+# Get separate describtive info about the panel sample vs. the convenience sample
+
+# panel participants
+print("Dem infos about the panel sample")
+sample_descriptive(sociodem_data.loc[sociodem_data['sample'] == 'panel'])
+
+#%%
+
+# convenience sample participants
+print("Dem infos about the convenience sample")
+sample_descriptive(sociodem_data.loc[sociodem_data['sample'] == 'convenience'])
 
 
 #%%
